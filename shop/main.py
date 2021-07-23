@@ -16,11 +16,13 @@ logger.setLevel(logging.INFO)
 mydb = mysql.connector.connect(
   host="localhost",
   user = "root",
-  password = "99609970"
+  password = "99609970",
+  database = "shop"
 )
 
 #create instance
 db = mydb.cursor()
+
 app = Client(
     "shop",
     api_id = 571145,
@@ -178,6 +180,43 @@ def CallBack(client, message):
         app.delete_messages(chat_id, PriceMessage.message_id)
 
 
+    #submiting new product
+    if data == "submit-product":
+        #product with description
+        if "description" in product.keys():
+            query = f"""
+                            INSERT INTO product (photo, name, count, unit, price, description)
+                            VALUES ('{str(product['photo'])}',
+                                    '{product['name']}',
+                                    '{product['count']}',
+                                    '{product['unit']}',
+                                    '{product['price']}',
+                                    '{product['description']}')
+                            """
+            db.execute(query)
+
+
+        #product without description
+        else:
+            query = f"""
+                            INSERT INTO product
+                            (photo, name, count, unit, price)
+                            VALUES ('{str(product['photo'])}',
+                                    '{product['name']}',
+                                    '{product['count']}',
+                                    '{product['unit']}',
+                                    '{product['price']}',
+                                    )
+                            """
+            db.execute(query)
+        mydb.commit()
+
+        # getting the last product code
+        db.execute("SELECT MAX(code) FROM product")
+        last_product = db.fetchone()
+        app.send_message(chat_id,
+                        f"محصول شما با موفقیت ثبت شد\n\nکد محصول : {last_product[0]}")
+
 
 
 @app.on_message(filters.text)
@@ -201,20 +240,21 @@ def GetTexts(client, message):
     #giving product count
     global get_product_count_or_not
     if get_product_count_or_not == True:
-        product["count"] = message.text
-        get_product_count_or_not = False
-        global CountMessage
+        if message.text.isdigit():
+            product["count"] = message.text
+            get_product_count_or_not = False
+            global CountMessage
 
-        CountMessage = app.send_message(
-                        message.chat.id,
-                        "تعداد موجودی محصولت رو هم گرفتم✅\n\nبزن رو دکمه زیر تا بریم مرحله بعدی",
-                        reply_markup = InlineKeyboardMarkup([
-                            [
-                                InlineKeyboardButton("مرحله بعد »", callback_data = "next-step-unit"),
-                            ]
-                        ])
-                        )
-        app.delete_messages(message.chat.id, NameMessage.message_id)
+            CountMessage = app.send_message(
+                            message.chat.id,
+                            "تعداد موجودی محصولت رو هم گرفتم✅\n\nبزن رو دکمه زیر تا بریم مرحله بعدی",
+                            reply_markup = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton("مرحله بعد »", callback_data = "next-step-unit"),
+                                ]
+                            ])
+                            )
+            app.delete_messages(message.chat.id, NameMessage.message_id)
 
     global get_product_unit_or_not
     if get_product_unit_or_not == True:
@@ -235,20 +275,21 @@ def GetTexts(client, message):
 
     global get_product_price_or_not
     if get_product_price_or_not == True:
-        product["price"] = message.text
-        get_product_price_or_not = False
-        global PriceMessage
-        PriceMessage = app.send_message(
-                message.chat.id,
-                text = "قیمت هر واحد از محصولت رو هم گرفتم✅\n\nمیخای توضیحات اضافه کنی به محصولت؟🤔",
-                reply_markup = InlineKeyboardMarkup([
-                                    [
-                                        InlineKeyboardButton("آره میخام 📝", callback_data = "set_product_description"),
-                                        InlineKeyboardButton("نه ❗️", callback_data = "dont_set_product_description")
-                                    ]
-                                ])
-        )
-        app.delete_messages(message.chat.id, UnitMessage.message_id)
+        if message.text.isdigit():
+            product["price"] = message.text
+            get_product_price_or_not = False
+            global PriceMessage
+            PriceMessage = app.send_message(
+                    message.chat.id,
+                    text = "قیمت هر واحد از محصولت رو هم گرفتم✅\n\nمیخای توضیحات اضافه کنی به محصولت؟🤔",
+                    reply_markup = InlineKeyboardMarkup([
+                                        [
+                                            InlineKeyboardButton("آره میخام 📝", callback_data = "set_product_description"),
+                                            InlineKeyboardButton("نه ❗️", callback_data = "dont_set_product_description")
+                                        ]
+                                    ])
+            )
+            app.delete_messages(message.chat.id, UnitMessage.message_id)
 
     global get_product_description_or_not
     if get_product_description_or_not == True:
@@ -265,7 +306,8 @@ def GetTexts(client, message):
                         )
 
         print('---------------------------------------------')
-        print(product)
+        for i in product.keys():
+            print(product[i])
         print("-----------------------------------------")
         SendAddedProduct(client, message, message.chat.id)
 
@@ -285,9 +327,31 @@ def GetProductImage(client, message):
 
 def SendAddedProduct(client, messagem, chat_id):
     try:
-        app.send_photo(chat_id, photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}")
+        app.send_photo(
+                    chat_id, photo = product["photo"],
+                    caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
+                    reply_markup = InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton("ثبت محصول ✅", callback_data = "submit-product"),
+                                InlineKeyboardButton("ویرایش اطلاعات ✏️", callback_data = "edit-product-information")
+                            ]
+                        ]
+                    )
+                )
     except KeyError:
-        app.send_photo(chat_id, photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان")
+        app.send_photo(
+                        chat_id,
+                        photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
+                        reply_markup = InlineKeyboardMarkup(
+                            [
+                                [
+                                    InlineKeyboardButton("ثبت محصول ✅", callback_data = "submit-product"),
+                                    InlineKeyboardButton("ویرایش اطلاعات ✏️", callback_data = "edit-product-information")
+                                ]
+                            ]
+                        )
+                        )
 
 
 app.run()
