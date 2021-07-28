@@ -17,7 +17,8 @@ mydb = mysql.connector.connect(
   host="localhost",
   user = "root",
   password = "99609970",
-  database = "shop"
+  database = "shop",
+  auth_plugin = 'mysql_native_password'
 )
 
 #create instance
@@ -75,6 +76,16 @@ get_product_unit_or_not = False
 global get_product_price_or_not
 get_product_price_or_not = False
 
+
+#variable for edite product information
+global edit_product_info
+edit_product_info = {
+                        "name" : False,
+                        "count" : False,
+                        "unit" : False,
+                        "price" : False,
+                        "description" : False
+                    }
 
 @app.on_callback_query()
 def CallBack(client, message):
@@ -219,6 +230,66 @@ def CallBack(client, message):
 
 
 
+    #edit product information (main)
+    if data == "edit-product-information":
+        app.edit_message_text(
+                            chat_id,
+                            message_id = sent_product.message_id,
+                            text = "کدوم یک از مشخصات محصولت رو میخوای ویرایش کنی؟",
+                            reply_markup = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton("واحد", callback_data = "edit_product_unit"),
+                                    InlineKeyboardButton("تعداد", callback_data = "edit_product_count"),
+                                    InlineKeyboardButton("نام", callback_data = "edit_product_name"),
+
+                                ],
+                                [
+                                    InlineKeyboardButton("توضیحات", callback_data = "edit_product_description"),
+                                    InlineKeyboardButton("قیمت", callback_data = "edit_product_price"),
+
+                                ],
+                                [
+                                    InlineKeyboardButton("برگشت »", callback_data = "back_to_submiting")
+                                ]
+                            ])
+                        )
+    global edit_product_info
+    if data.startswith("edit_product"):
+        global edit_type
+        edit_dictionary = {
+                            "name" :"نام",
+                            "count" : "تعداد",
+                            "unit" : "واحد",
+                            "price" : "قیمت",
+                            "description" : "توضیحات"
+                        }
+        edit_type = data.split("_")[-1]
+        edit_product_info[edit_type] = True
+        app.send_message(chat_id, f"لطفا {edit_dictionary[edit_type]} جدید رو بفرس🔖")
+
+
+    # back to submiting section
+    if data == "back_to_submiting":
+        try:
+            caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
+            sent_product = app.send_photo(
+                        chat_id,
+                        photo = sent_product.photo.file_id,
+                        reply_markup = sent_product.reply_markup,
+                        caption = caption
+                    )
+        except KeyError:
+            caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
+
+            sent_product = app.send_photo(
+                        chat_id,
+                        photo = sent_product.photo.file_id,
+                        reply_markup = sent_product.reply_markup,
+                        caption = caption
+                    )
+        app.send_message(chat_id, "یــــــــــــــــا حسن")
+
+
 @app.on_message(filters.text)
 def GetTexts(client, message):
 
@@ -305,12 +376,15 @@ def GetTexts(client, message):
                         AdminMainMessage.message_id,
                         )
 
-        print('---------------------------------------------')
-        for i in product.keys():
-            print(product[i])
-        print("-----------------------------------------")
         SendAddedProduct(client, message, message.chat.id)
 
+    try:
+        global edit_product_info
+        global edit_type
+        if edit_product_info[edit_type] == True:
+            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
+    except Exception as ex:
+        print(ex)
 
 @app.on_message(filters.photo)
 def GetProductImage(client, message):
@@ -326,8 +400,9 @@ def GetProductImage(client, message):
 
 
 def SendAddedProduct(client, messagem, chat_id):
+    global sent_product
     try:
-        app.send_photo(
+        sent_product = app.send_photo(
                     chat_id, photo = product["photo"],
                     caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
                     reply_markup = InlineKeyboardMarkup(
@@ -340,7 +415,7 @@ def SendAddedProduct(client, messagem, chat_id):
                     )
                 )
     except KeyError:
-        app.send_photo(
+        sent_product = app.send_photo(
                         chat_id,
                         photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
                         reply_markup = InlineKeyboardMarkup(
