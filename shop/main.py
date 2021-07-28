@@ -77,6 +77,9 @@ global get_product_price_or_not
 get_product_price_or_not = False
 
 
+global GetEditCode
+GetEditCode = False
+
 #variable for edite product information
 global edit_product_info
 edit_product_info = {
@@ -111,7 +114,7 @@ def CallBack(client, message):
             reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product")],
                 [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")],
-                [InlineKeyboardButton("✏️ویرایش محصول", callback_data = "edit_product")],
+                [InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product")],
                 [InlineKeyboardButton("برشگت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
             ])
         )
@@ -153,7 +156,11 @@ def CallBack(client, message):
         get_product_unit_or_not = False
         get_product_price_or_not = False
 
-        app.send_message(chat_id, "شما فرآیند افزودن محصول رو لغو کردین")
+        app.send_message(chat_id, "شما فرآیند افزودن محصول رو لغو کردین", reply_markup = ([
+            [
+                InlineKeyboardButton("برشگت »", callback_data = "back_to_main_menu")
+            ]
+        ]))
 
     #next step for giving product count
     if data == "next-step-count":
@@ -199,12 +206,11 @@ def CallBack(client, message):
                             INSERT INTO product (photo, name, count, unit, price, description)
                             VALUES ('{str(product['photo'])}',
                                     '{product['name']}',
-                                    '{product['count']}',
+                                     {product['count']},
                                     '{product['unit']}',
                                     '{product['price']}',
                                     '{product['description']}')
                             """
-            db.execute(query)
 
 
         #product without description
@@ -214,12 +220,12 @@ def CallBack(client, message):
                             (photo, name, count, unit, price)
                             VALUES ('{str(product['photo'])}',
                                     '{product['name']}',
-                                    '{product['count']}',
+                                     {product['count']},
                                     '{product['unit']}',
-                                    '{product['price']}',
-                                    )
+                                    '{product['price']}')
                             """
-            db.execute(query)
+
+        db.execute(query)
         mydb.commit()
 
         # getting the last product code
@@ -227,11 +233,13 @@ def CallBack(client, message):
         last_product = db.fetchone()
         app.send_message(chat_id,
                         f"محصول شما با موفقیت ثبت شد\n\nکد محصول : {last_product[0]}")
+        #app.delete_messages(chat_id, message_id = sent_product.message_id)
 
 
 
     #edit product information (main)
     if data == "edit-product-information":
+        global sent_product
         app.edit_message_text(
                             chat_id,
                             message_id = sent_product.message_id,
@@ -253,6 +261,7 @@ def CallBack(client, message):
                                 ]
                             ])
                         )
+
     global edit_product_info
     if data.startswith("edit_product"):
         global edit_type
@@ -271,23 +280,28 @@ def CallBack(client, message):
     # back to submiting section
     if data == "back_to_submiting":
         try:
-            caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
-            sent_product = app.send_photo(
+            sent_product = app.edit_message_text(
                         chat_id,
-                        photo = sent_product.photo.file_id,
                         reply_markup = sent_product.reply_markup,
-                        caption = caption
+                        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
+                        message_id  = sent_product.message_id
                     )
-        except KeyError:
-            caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
 
-            sent_product = app.send_photo(
+        except KeyError:
+            caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+            sent_product = app.edit_message_text(
                         chat_id,
-                        photo = sent_product.photo.file_id,
                         reply_markup = sent_product.reply_markup,
-                        caption = caption
+                        text = caption,
+                        message_id  = sent_product.message_id
                     )
-        app.send_message(chat_id, "یــــــــــــــــا حسن")
+
+    #manage for edit product with pannel
+    global GetEditCode
+    if data == "with_menu_edit_product":
+        GetEditCode = True
+        print(GetEditCode)
+        app.send_message(chat_id, "لطفا کد محصول مورد نظرتو برای ویرایش بفرس🈁")
 
 
 @app.on_message(filters.text)
@@ -364,6 +378,7 @@ def GetTexts(client, message):
 
     global get_product_description_or_not
     if get_product_description_or_not == True:
+        global sent_product
         product["description"] = message.text
         get_product_description_or_not = False
         app.send_message(
@@ -382,9 +397,48 @@ def GetTexts(client, message):
         global edit_product_info
         global edit_type
         if edit_product_info[edit_type] == True:
+            product[edit_type] = message.text
+            edit_product_info[edit_type] = False
             app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
     except Exception as ex:
         print(ex)
+
+    if GetEditCode == True:
+        code = message.text
+        db.execute(f"SELECT * FROM product WHERE code = {code}")
+        fetched_data = db.fetchone()
+        product["photo"] = fetched_data[1]
+        product["name"] = fetched_data[2]
+        product["count"] = fetched_data[3]
+        product["unit"] = fetched_data[4]
+        product["price"] = fetched_data[5]
+        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+
+
+        if len(fetched_data) == 7:
+            product["description"] = fetched_data[6]
+            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+
+
+        app.send_photo(message.chat.id, photo = product["photo"], caption = text,
+                            reply_markup = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton("واحد", callback_data = "edit_product_unit"),
+                                    InlineKeyboardButton("تعداد", callback_data = "edit_product_count"),
+                                    InlineKeyboardButton("نام", callback_data = "edit_product_name"),
+
+                                ],
+                                [
+                                    InlineKeyboardButton("توضیحات", callback_data = "edit_product_description"),
+                                    InlineKeyboardButton("قیمت", callback_data = "edit_product_price"),
+
+                                ],
+                                [
+                                    InlineKeyboardButton("برگشت »", callback_data = "back_to_submiting")
+                                ]
+                            ]))
+        print(product)
+
 
 @app.on_message(filters.photo)
 def GetProductImage(client, message):
@@ -414,6 +468,7 @@ def SendAddedProduct(client, messagem, chat_id):
                         ]
                     )
                 )
+
     except KeyError:
         sent_product = app.send_photo(
                         chat_id,
