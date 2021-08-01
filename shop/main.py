@@ -80,6 +80,9 @@ get_product_price_or_not = False
 global GetEditCode
 GetEditCode = False
 
+
+variable_edit_after_submiting = False
+
 #variable for edite product information
 global edit_product_info
 edit_product_info = {
@@ -107,7 +110,8 @@ def CallBack(client, message):
     # edit firt admin message and show product management options
     if data == "product_management":
         client.answer_callback_query(callback_id, "شما به بخش مدیریت محصولا فروشگاه خود وارد شدید 📥")
-        app.edit_message_text(
+        global ProductMainMenu
+        ProductMainMenu = app.edit_message_text(
             chat_id = chat_id,
             message_id = AdminMainMessage.message_id,
             text = "🔘 مدیریت محصولات \n\n 🛍 تو این بخش میتونی عملکرد های زیر رو روی محصولات فروشگاهت داشته باشی 👇",
@@ -115,7 +119,7 @@ def CallBack(client, message):
                 [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product")],
                 [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")],
                 [InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product")],
-                [InlineKeyboardButton("برشگت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
+                [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
             ])
         )
 
@@ -263,6 +267,7 @@ def CallBack(client, message):
                         )
 
     global edit_product_info
+    global variable_edit_after_submiting
     if data.startswith("edit_product"):
         global edit_type
         edit_dictionary = {
@@ -276,7 +281,15 @@ def CallBack(client, message):
         edit_product_info[edit_type] = True
         app.send_message(chat_id, f"لطفا {edit_dictionary[edit_type]} جدید رو بفرس🔖")
 
-
+    #back to product management page
+    if data == "back_to_product_management":
+        product = {}
+        app.delete_messages(chat_id, sent_product.message_id)
+        ProductMainMenu = app.send_message(
+                            chat_id,
+                            text = ProductMainMenu.text,
+                            reply_markup = ProductMainMenu.reply_markup,
+        )
     # back to submiting section
     if data == "back_to_submiting":
         try:
@@ -298,9 +311,11 @@ def CallBack(client, message):
 
     #manage for edit product with pannel
     global GetEditCode
+    global variable_edit_after_submiting
+
     if data == "with_menu_edit_product":
         GetEditCode = True
-        print(GetEditCode)
+        variable_edit_after_submiting = True
         app.send_message(chat_id, "لطفا کد محصول مورد نظرتو برای ویرایش بفرس🈁")
 
 
@@ -393,17 +408,11 @@ def GetTexts(client, message):
 
         SendAddedProduct(client, message, message.chat.id)
 
-    try:
-        global edit_product_info
-        global edit_type
-        if edit_product_info[edit_type] == True:
-            product[edit_type] = message.text
-            edit_product_info[edit_type] = False
-            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
-    except Exception as ex:
-        print(ex)
 
+
+    global GetEditCode
     if GetEditCode == True:
+        global code
         code = message.text
         db.execute(f"SELECT * FROM product WHERE code = {code}")
         fetched_data = db.fetchone()
@@ -412,6 +421,7 @@ def GetTexts(client, message):
         product["count"] = fetched_data[3]
         product["unit"] = fetched_data[4]
         product["price"] = fetched_data[5]
+
         text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
 
@@ -420,7 +430,7 @@ def GetTexts(client, message):
             text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
 
 
-        app.send_photo(message.chat.id, photo = product["photo"], caption = text,
+        sent_product = app.send_photo(message.chat.id, photo = product["photo"], caption = text,
                             reply_markup = InlineKeyboardMarkup([
                                 [
                                     InlineKeyboardButton("واحد", callback_data = "edit_product_unit"),
@@ -434,11 +444,34 @@ def GetTexts(client, message):
 
                                 ],
                                 [
-                                    InlineKeyboardButton("برگشت »", callback_data = "back_to_submiting")
+                                    InlineKeyboardButton("برگشت »", callback_data = "back_to_product_management")
                                 ]
                             ]))
-        print(product)
+        GetEditCode = False
 
+    try:
+        global edit_product_info
+        global edit_type
+
+        if edit_product_info[edit_type] == True:
+            global variable_edit_after_submiting
+
+            if variable_edit_after_submiting == True:
+                print(edit_type)
+                print(message.text)
+                print(code)
+                db.execute(f"UPDATE product SET {edit_type} = '{message.text}' WHERE code = {code}")
+                mydb.commit()
+                edit_product_info[edit_type] = False
+
+            else:
+                product[edit_type] = message.text
+                edit_product_info[edit_type] = False
+
+            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
+
+    except Exception as ex:
+        print(ex)
 
 @app.on_message(filters.photo)
 def GetProductImage(client, message):
@@ -482,6 +515,8 @@ def SendAddedProduct(client, messagem, chat_id):
                             ]
                         )
                         )
+
+
 
 
 app.run()

@@ -1,0 +1,7 @@
+async-lru==1.0.2
+mysql-connector-python==8.0.26
+protobuf==3.17.3
+pyaes==1.6.1
+Pyrogram==1.2.9
+PySocks==1.7.1
+six==1.16.0
