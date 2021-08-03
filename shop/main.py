@@ -53,6 +53,13 @@ def main(client, message):
                         )
 
 
+            db.execute("SELECT MAX(id)  FROM adminmessageid")
+            if db.fetchone()[0] == None:
+                db.execute(f"INSERT INTO adminmessageid (message_id) VALUES ({AdminMainMessage.message_id})")
+                mydb.commit()
+            else:
+                db.execute(f"UPDATE adminmessageid SET message_id = {AdminMainMessage.message_id}")
+                mydb.commit()
 
 
 #variable for product
@@ -80,6 +87,8 @@ get_product_price_or_not = False
 global GetEditCode
 GetEditCode = False
 
+global GetDeleteCode
+GetDeleteCode = False
 
 variable_edit_after_submiting = False
 
@@ -99,6 +108,7 @@ def CallBack(client, message):
     chat_id = message.message.chat.id
     message_id = message.message.message_id
     data = message.data
+    print(data)
 
     global get_product_image_or_not
     global get_product_name_or_not
@@ -111,9 +121,11 @@ def CallBack(client, message):
     if data == "product_management":
         client.answer_callback_query(callback_id, "شما به بخش مدیریت محصولا فروشگاه خود وارد شدید 📥")
         global ProductMainMenu
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
         ProductMainMenu = app.edit_message_text(
             chat_id = chat_id,
-            message_id = AdminMainMessage.message_id,
+            message_id = message_id,
             text = "🔘 مدیریت محصولات \n\n 🛍 تو این بخش میتونی عملکرد های زیر رو روی محصولات فروشگاهت داشته باشی 👇",
             reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product")],
@@ -123,12 +135,16 @@ def CallBack(client, message):
             ])
         )
 
+
+
     # back to main menu
     if data == "back_to_main_menu":
         client.answer_callback_query(callback_id, "شما به منو اصلی پنل ادمین  برگشتید🔺")
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
         app.edit_message_text(
-            chat_id = AdminMainMessage.chat.id,
-            message_id = AdminMainMessage.message_id,
+            chat_id = chat_id,
+            message_id = message_id,
             text = AdminMainMessage.text,
             reply_markup = AdminMainMessage.reply_markup
         )
@@ -137,18 +153,23 @@ def CallBack(client, message):
 
 
     #add new product
+    global product
     if data == "add_new_product":
         get_product_image_or_not = True
         app.send_message(chat_id, "عکس محصولتو بفرس🖼📮")
-
-        app.edit_message_text(
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        cancel_adding_product  = app.edit_message_text(
             chat_id,
-            AdminMainMessage.message_id,
-            "شما در حال اضافه کردن محصول به فروشگاه خودتون هستن\n\nبرای لغو کردن افزودن محصول دکمه زیر را فشار دهید",
+            message_id = message_id,
+            text = "شما در حال اضافه کردن محصول به فروشگاه خودتون هستن\n\nبرای لغو کردن افزودن محصول دکمه زیر را فشار دهید",
             reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("لغو کردن", callback_data = "cancel-add-product")]
             ])
         )
+
+        db.execute(f"UPDATE adminmessageid SET message_id = {cancel_adding_product.message_id}")
+        mydb.commit()
 
     #cancel adding product
 
@@ -160,11 +181,20 @@ def CallBack(client, message):
         get_product_unit_or_not = False
         get_product_price_or_not = False
 
-        app.send_message(chat_id, "شما فرآیند افزودن محصول رو لغو کردین", reply_markup = ([
-            [
-                InlineKeyboardButton("برشگت »", callback_data = "back_to_main_menu")
-            ]
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        app.delete_messages(chat_id, message_id)
+
+        cancel = app.send_message(chat_id = chat_id,
+                        text = "شما فرآیند افزودن محصول رو لغو کردین",
+                        reply_markup = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton("برگشت »", callback_data = "back_to_main_menu")
+                                ]
         ]))
+        db.execute(F"UPDATE adminmessageid SET message_id = {cancel.message_id}")
+        mydb.commit()
+
 
     #next step for giving product count
     if data == "next-step-count":
@@ -237,7 +267,11 @@ def CallBack(client, message):
         last_product = db.fetchone()
         app.send_message(chat_id,
                         f"محصول شما با موفقیت ثبت شد\n\nکد محصول : {last_product[0]}")
-        #app.delete_messages(chat_id, message_id = sent_product.message_id)
+
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        print(message_id)
+        app.delete_messages(chat_id, message_id)
 
 
 
@@ -284,12 +318,19 @@ def CallBack(client, message):
     #back to product management page
     if data == "back_to_product_management":
         product = {}
-        app.delete_messages(chat_id, sent_product.message_id)
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        app.delete_messages(chat_id, message_id)
         ProductMainMenu = app.send_message(
                             chat_id,
                             text = ProductMainMenu.text,
                             reply_markup = ProductMainMenu.reply_markup,
         )
+        db.execute(f"UPDATE adminmessageid SET message_id = {ProductMainMenu.message_id}")
+        mydb.commit()
+
+
+
     # back to submiting section
     if data == "back_to_submiting":
         try:
@@ -316,9 +357,26 @@ def CallBack(client, message):
     if data == "with_menu_edit_product":
         GetEditCode = True
         variable_edit_after_submiting = True
-        app.send_message(chat_id, "لطفا کد محصول مورد نظرتو برای ویرایش بفرس🈁")
+        get_code_message = app.send_message(chat_id, "لطفا کد محصول مورد نظرتو برای ویرایش بفرس🈁")
 
 
+    #delete product
+    if data == "delete_product":
+        global GetDeleteCode
+        GetDeleteCode = True
+        app.send_message(chat_id, "لطفا کد محصول مورد نظرتو برای حذف بفرس❌")
+
+
+    if data == "delete_product_button":
+        db.execute(f"DELETE FROM product WHERE code = {delete_code}")
+        mydb.commit()
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        app.delete_messages(chat_id, message_id)
+        app.send_message(chat_id, "محصول مورد نظر با موفقیت حذف شد ✅")
+
+#a
+#hasn vajdi add new comment for test github
 @app.on_message(filters.text)
 def GetTexts(client, message):
 
@@ -447,7 +505,47 @@ def GetTexts(client, message):
                                     InlineKeyboardButton("برگشت »", callback_data = "back_to_product_management")
                                 ]
                             ]))
+        db.execute(f"UPDATE adminmessageid SET message_id = {sent_product.message_id}")
+        mydb.commit()
+
         GetEditCode = False
+
+    global GetDeleteCode
+    if GetDeleteCode == True:
+        global delete_code
+        delete_code = message.text
+        db.execute(f"SELECT * FROM product WHERE code = {delete_code}")
+        fetched_data = db.fetchone()
+        product["photo"] = fetched_data[1]
+        product["name"] = fetched_data[2]
+        product["count"] = fetched_data[3]
+        product["unit"] = fetched_data[4]
+        product["price"] = fetched_data[5]
+
+        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+
+
+        if len(fetched_data) == 7:
+            product["description"] = fetched_data[6]
+            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+
+
+        sent_product = app.send_photo(
+                                        message.chat.id,
+                                        photo = product["photo"],
+                                        caption = text,
+                                        reply_markup = InlineKeyboardMarkup([
+                                            [
+                                                InlineKeyboardButton("❌ حذف محصول ❌", callback_data = "delete_product_button"),
+                                                InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")
+                                            ]
+                                        ])
+                                    )
+
+        db.execute(f"UPDATE adminmessageid SET message_id = {sent_product.message_id}")
+        mydb.commit()
+
+        GetDeleteCode = False
 
     try:
         global edit_product_info
@@ -515,8 +613,7 @@ def SendAddedProduct(client, messagem, chat_id):
                             ]
                         )
                         )
-
-
-
+    db.execute(f"UPDATE adminmessageid SET message_id = {sent_product.message_id}")
+    mydb.commit()
 
 app.run()
