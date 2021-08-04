@@ -48,8 +48,9 @@ def main(client, message):
                         "شما ادمین هستید",
                         reply_markup = InlineKeyboardMarkup([
                                                 [InlineKeyboardButton("مدیریت محصولات 🛍", callback_data = "product_management")],
-                                                [InlineKeyboardButton("تست", callback_data = "test")]
+                                                [InlineKeyboardButton("مدیریت فروشگاه 🏪", callback_data = "store_management")]
                                             ])
+
                         )
 
 
@@ -135,7 +136,70 @@ def CallBack(client, message):
             ])
         )
 
+    #intro in store_management
+    if data == "store_management":
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        store_management = app.edit_message_text(
+                            chat_id,
+                            message_id = message_id,
+                            text = "🔘 مدیریت فروشگاه \n\n🏪 تو این بخش میتونی عملکرد های زیر رو روی  فروشگاهت داشته باشی 👇",
+                            reply_markup = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton("پنل پیامکی 💬", callback_data = "sms_panel"),
+                                    InlineKeyboardButton("سبد خرید 🛒", callback_data = "cart")
+                                ],
+                                [
+                                    InlineKeyboardButton("تخفیف ها 🔖", callback_data = "discounts"),
+                                    InlineKeyboardButton("آمار فروشگاه 📊", callback_data = "store_amar")
+                                ],
+                                [InlineKeyboardButton("آمار فروش 📈", callback_data = "sell_amar")],
+                                [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
+                            ])
+        )
 
+        db.execute(f"UPDATE adminmessageid SET message_id = {store_management.message_id}")
+        mydb.commit()
+
+
+    #cart
+    if data == "cart":
+        db.execute("SELECT * FROM settings WHERE name = 'cart_active'")
+        # if the settings for cart there isn't, this section will create sttings
+        if db.fetchone() == None:
+            db.execute("INSERT INTO settings (name, value) VALUES ('cart_active', 'True')")
+            mydb.commit()
+            db.execute("INSERT INTO settings (name, value) VALUES ('cart_hour', '1')")
+            mydb.commit()
+
+        #select message id for edit
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+
+        #select the status of cart
+        db.execute("SELECT * FROM settings WHERE name = 'cart_active'")
+        status = db.fetchone()[2]
+        app.edit_message_text(
+                                    chat_id,
+                                    message_id = message_id,
+                                    text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
+                                    reply_markup = InlineKeyboardMarkup([
+                                        [
+                                            InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
+                                            InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                                        ]
+                                    ])
+            )
+
+    #activate cart
+    if data == "active_cart_settings":
+        db.execute("SELECT * FROM settings WHERE name = 'cart_active'")
+        if db.fetchone()[2] != "True":
+            db.execute("UPDATE settings SET value = 'True' WHERE name = 'cart_active'")
+            mydb.commit()
 
     # back to main menu
     if data == "back_to_main_menu":
