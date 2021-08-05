@@ -140,6 +140,7 @@ def CallBack(client, message):
     if data == "store_management":
         db.execute("SELECT * FROM adminmessageid")
         message_id = db.fetchone()[1]
+        global store_management
         store_management = app.edit_message_text(
                             chat_id,
                             message_id = message_id,
@@ -179,19 +180,48 @@ def CallBack(client, message):
         #select the status of cart
         db.execute("SELECT * FROM settings WHERE name = 'cart_active'")
         status = db.fetchone()[2]
+
+
+
+        if status == "True":
+            db.execute("SELECT * FROM settings WHERE name = 'cart_hour'")
+            cart_hour = db.fetchone()[2]
+            reply_markup = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
+                                    InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
+                                ],
+                                [
+                                    InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
+                                ],
+                                [
+                                    InlineKeyboardButton("➕", callback_data = "increase_cart_hour"),
+                                    InlineKeyboardButton(f"{cart_hour}", callback_data = "blank"),
+                                    InlineKeyboardButton("➖", callback_data = "decrease_cart_hour")
+                                ],
+                                [
+                                    InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                                ]
+
+                            ])
+        else:
+            reply_markup = InlineKeyboardMarkup([
+                            [
+                                InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
+                                InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
+                            ],
+                            [
+                                InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                            ]
+
+                        ])
+
+
         app.edit_message_text(
                                     chat_id,
                                     message_id = message_id,
                                     text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
-                                    reply_markup = InlineKeyboardMarkup([
-                                        [
-                                            InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
-                                            InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
-                                        ],
-                                        [
-                                            InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
-                                        ]
-                                    ])
+                                    reply_markup = reply_markup
             )
 
     #activate cart
@@ -200,7 +230,131 @@ def CallBack(client, message):
         if db.fetchone()[2] != "True":
             db.execute("UPDATE settings SET value = 'True' WHERE name = 'cart_active'")
             mydb.commit()
+            db.execute("SELECT * FROM adminmessageid")
+            message_id = db.fetchone()[1]
+            db.execute("SELECT * FROM settings WHERE name = 'cart_hour'")
+            cart_hour = db.fetchone()[2]
+            app.edit_message_text(
+                                        chat_id,
+                                        message_id = message_id,
+                                        text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
+                                        reply_markup = InlineKeyboardMarkup([
+                                            [
+                                                InlineKeyboardButton("فعال ✅", callback_data = "active_cart_settings"),
+                                                InlineKeyboardButton("غیرفعال", callback_data = "deactive_cart_settings")
+                                            ],
+                                            [
+                                                InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
+                                            ],
+                                            [
+                                                InlineKeyboardButton("➕", callback_data = "increase_cart_hour"),
+                                                InlineKeyboardButton(f"{cart_hour}", callback_data = "blank"),
+                                                InlineKeyboardButton("➖", callback_data = "decrease_cart_hour")
+                                            ],
+                                            [
+                                                InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                                            ]
+                                        ])
+                )
 
+
+    #deactive cart
+    if data == "deactive_cart_settings":
+        db.execute("UPDATE settings SET value = 'False' WHERE name = 'cart_active'")
+        mydb.commit()
+        app.edit_message_text(
+                                    chat_id,
+                                    message_id = message_id,
+                                    text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
+                                    reply_markup = InlineKeyboardMarkup([
+                                        [
+                                            InlineKeyboardButton("فعال", callback_data = "active_cart_settings"),
+                                            InlineKeyboardButton("غیرفعال ✅", callback_data = "deactive_cart_settings")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                                        ]
+                                    ])
+            )
+
+    #increase cart hour
+    if data == "increase_cart_hour":
+        db.execute("SELECT * FROM settings WHERE name = 'cart_hour'")
+        cart_hour = int(db.fetchone()[2]) + 1
+        if cart_hour > 24:cart_hour = "1"
+        db.execute(f"UPDATE settings SET value = '{cart_hour}' WHERE name = 'cart_hour'")
+        mydb.commit()
+
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        app.edit_message_text(
+                                    chat_id,
+                                    message_id = message_id,
+                                    text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
+                                    reply_markup = InlineKeyboardMarkup([
+                                        [
+                                            InlineKeyboardButton("فعال ✅", callback_data = "active_cart_settings"),
+                                            InlineKeyboardButton("غیرفعال", callback_data = "deactive_cart_settings")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("➕", callback_data = "increase_cart_hour"),
+                                            InlineKeyboardButton(f"{cart_hour}", callback_data = "blank"),
+                                            InlineKeyboardButton("➖", callback_data = "decrease_cart_hour")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                                        ]
+                                    ])
+            )
+
+    #decrease cart hour
+    if data == "decrease_cart_hour":
+        db.execute("SELECT * FROM settings WHERE name = 'cart_hour'")
+        cart_hour = int(db.fetchone()[2]) - 1
+        if cart_hour < 1:cart_hour = "24"
+        db.execute(f"UPDATE settings SET value = '{cart_hour}' WHERE name = 'cart_hour'")
+        mydb.commit()
+
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+        app.edit_message_text(
+                                    chat_id,
+                                    message_id = message_id,
+                                    text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
+                                    reply_markup = InlineKeyboardMarkup([
+                                        [
+                                            InlineKeyboardButton("فعال ✅", callback_data = "active_cart_settings"),
+                                            InlineKeyboardButton("غیرفعال", callback_data = "deactive_cart_settings")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("➕", callback_data = "increase_cart_hour"),
+                                            InlineKeyboardButton(f"{cart_hour}", callback_data = "blank"),
+                                            InlineKeyboardButton("➖", callback_data = "decrease_cart_hour")
+                                        ],
+                                        [
+                                            InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                                        ]
+                                    ])
+            )
+
+
+    #back to stor management panel
+    if data == "back_to_store_management":
+        db.execute("SELECT * FROM adminmessageid")
+        message_id = db.fetchone()[1]
+
+        app.edit_message_text(
+                                    chat_id,
+                                    message_id = message_id,
+                                    text = store_management.text,
+                                    reply_markup = store_management.reply_markup
+                            )
     # back to main menu
     if data == "back_to_main_menu":
         client.answer_callback_query(callback_id, "شما به منو اصلی پنل ادمین  برگشتید🔺")
@@ -236,7 +390,6 @@ def CallBack(client, message):
         mydb.commit()
 
     #cancel adding product
-
     if data == "cancel-add-product":
         get_product_image_or_not = False
         get_product_name_or_not = False
