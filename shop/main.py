@@ -348,13 +348,61 @@ def CallBack(client, message):
     if data == "back_to_store_management":
         db.execute("SELECT * FROM adminmessageid")
         message_id = db.fetchone()[1]
-
         app.edit_message_text(
                                     chat_id,
                                     message_id = message_id,
                                     text = store_management.text,
                                     reply_markup = store_management.reply_markup
                             )
+
+    #handle discounts
+    if data == "discounts":
+        keys = [
+            [
+                InlineKeyboardButton("➕ افزودن تخفیف جدید 🔖", callback_data = "add_new_discount")
+            ]
+        ]
+        db.execute("SELECT * FROM discounts ORDER BY id DESC LIMIT 4")
+        for discount in db.fetchall():
+            text = f"{discount[1]} درصد"
+
+            keys.append([InlineKeyboardButton(f"{text}", callback_data = f"detail_discount_{discount[0]}")])
+        #add imoji for active discount
+        keys[1][0].text += " ✅"
+
+        #add active discount button to panel
+        keys[1].append(InlineKeyboardButton("تخفیف فعال : ", callback_data = "blank"),)
+        #add new button for help admin
+        keys.insert(keys.index(keys[2]),[InlineKeyboardButton("3 تخفیف آخر👇 برا مشاهده جزییات کلیک کنید", callback_data = "None")])
+        db.execute('SELECT * FROM adminmessageid')
+        message_id = db.fetchone()[1]
+        app.edit_message_text(
+                        chat_id,
+                        message_id = message_id,
+                        text = "🔘 مدیریت تخفیف\n\nتو این بخش میتونی تنظیمات تخفیف ها رو انجام بدی👇",
+                        reply_markup = InlineKeyboardMarkup(keys)
+        )
+
+    if data == "add_new_discount":
+        client.answer_callback_query(
+                                callback_id,
+                                "⚠️ توجه : تخفیف افزوده شده به عنوان تخفیف فعال محسوب میشه و روی همه محصولات فروشگاهت اعمال میشه\n\n🔻درصد تخفیف و  علت تخفیف رو به صورت زیر بفرست :‌\n15 عید نوروز",
+                                show_alert = True,
+                                )
+        db.execute('SELECT * FROM adminmessageid')
+        message_id = db.fetchone()[1]
+
+    if data.startswith("detail_discount_"):
+        id = data.split("_")[-1]
+        db.execute(f"SELECT * FROM discounts WHERE id = {int(id)}")
+        discount_detail = db.fetchone()
+        client.answer_callback_query(
+                                    callback_id,
+                                    f"وضعیت تخفیف : {'فعال' if discount_detail[2] == 'active' else 'غیر فعال'}\nمناسبت : {discount_detail[3]}\nتاریخ ثبت : {discount_detail[4]}",
+                                    show_alert = True,
+                                )
+
+
     # back to main menu
     if data == "back_to_main_menu":
         client.answer_callback_query(callback_id, "شما به منو اصلی پنل ادمین  برگشتید🔺")
