@@ -112,10 +112,10 @@ def vars():
     get_new_password = False
 
     global message_to_all
-    message_to_all = True
+    message_to_all = False
 
     global forward_to_all
-    forward_to_all = True
+    forward_to_all = False
 
     #variable for edite product information
     global edit_product_info
@@ -1403,6 +1403,30 @@ def CallBack(client, message):
         #send saved file to admin
         app.send_document(chat_id, 'کل تخفیف ها.xls', caption = "🔖همه تخفیف ها افزوده شده در فروشگاه شما از ابتدای راه اندازی\n📂به صورت فایل اکسل")
 
+@app.on_message(filters.forwarded)
+def Forwarded(client, message):
+    global forward_to_all
+
+    if forward_to_all == True:
+        db.execute(f"SELECT name FROM settings WHERE name = '{message.chat.id}'")
+        admin_id = db.fetchone()[0]
+        db.execute("SELECT user_id FROM users")
+        counter = 0
+        counter2 = 0
+        for i in db.fetchall():
+            if i[0] != admin_id:
+                try:
+                    app.forward_messages(f"{i[0]}", f"{admin_id}", message.message_id)
+                    counter += 1
+                    print("yess")
+                except BadRequest:
+                    counter2 += 1
+
+        app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
+        forward_to_all = False
+
+    else:
+        print("byyyyyy")
 
 
 @app.on_message(filters.text)
@@ -1428,7 +1452,6 @@ def GetTexts(client, message):
     global get_product_count_cart
     global get_code_add_to_cart
     global message_to_all
-    global forward_to_all
 
 
     #giving news password
@@ -1937,23 +1960,6 @@ def GetTexts(client, message):
         app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
         message_to_all = False
 
-    elif forward_to_all == True:
-        db.execute(f"SELECT name FROM settings WHERE name = '{message.chat.id}'")
-        admin_id = db.fetchone()[0]
-        db.execute("SELECT user_id FROM users")
-        counter = 0
-        counter2 = 0
-        for i in db.fetchall():
-            if i[0] != admin_id:
-                try:
-                    app.forward_messages(f"{i[0]}", f"{admin_id}", message.message_id)
-                    counter += 1
-                    print("yess")
-                except BadRequest:
-                    counter2 += 1
-
-        app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
-        forward_to_all = False
     else:
         print(message.text)
 
@@ -2022,5 +2028,7 @@ def SendAddedProduct(client, message, chat_id):
                         )
     db.execute(f"UPDATE adminmessageid SET message_id = {sent_product.message_id}")
     mydb.commit()
+
+
 
 app.run()
