@@ -13,6 +13,7 @@ import jdatetime
 
 #pyrogram
 from pyrogram import Client, filters
+from pyrogram.errors import BadRequest, Forbidden
 from pyrogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 #logging
@@ -104,6 +105,18 @@ def vars():
     global get_count_add_to_cart
     get_count_add_to_cart = False
 
+    global get_connection_id
+    get_connection_id = False
+
+    global get_new_password
+    get_new_password = False
+
+    global message_to_all
+    message_to_all = True
+
+    global forward_to_all
+    forward_to_all = True
+
     #variable for edite product information
     global edit_product_info
     edit_product_info = {
@@ -123,9 +136,18 @@ def main(client, message):
     command = message.command
     chat_id = message.chat.id
 
+    # check user chat id
+    db.execute(f"SELECT * FROM chat_id WHERE chat_id  = '{message.chat.id}'")
+    if db.fetchone() == None:
+        db.execute(f"INSERT INTO chat_id (chat_id, message_id) VALUES ('{message.chat.id}', '0')")
+        mydb.commit()
+
 
     #start normally
     if command[0] == "start":
+        db.execute(f"UPDATE settings SET value = 'start' WHERE name = '{chat_id}'")
+        mydb.commit()
+
         db.execute(f"SELECT * FROM users WHERE user_id = '{message.from_user.id}'")
         if db.fetchone() == None:
             db.execute(f"INSERT INTO users (user_id) VALUES ('{message.from_user.id}')")
@@ -188,6 +210,8 @@ def main(client, message):
 
 
         if len(command) == 1:
+            db.execute("SELECT value FROM settings WHERE name = 'id'")
+            id = db.fetchone()[0]
             db.execute("SELECT value FROM settings WHERE name = 'welcome_text'")
             welcome_text = db.fetchone()[0]
             global start_main_mneu
@@ -195,41 +219,55 @@ def main(client, message):
                             chat_id,
                             text = welcome_text,
                             reply_markup = InlineKeyboardMarkup([
-                                [InlineKeyboardButton("👁مشاهده محصول 🛍", callback_data = "customer_show_product")],
                                 [InlineKeyboardButton("سبد خرید 🛒", callback_data = "customer_see_cart")],
-                                [InlineKeyboardButton("ارتباط با پشتیبانی فروشگاه 👤", callback_data = "contact_shop_support")],
-                                [InlineKeyboardButton("💻 ارتباط به برنامه نویس ربات 💻", callback_data = "contact_bot_programmer")],
+                                [InlineKeyboardButton("ارتباط با پشتیبانی فروشگاه 👤", url = f"https://t.me/{id}")],
+                                [InlineKeyboardButton("💻 ارتباط به برنامه نویس ربات 💻", url = "https://t.me/hasan_zltn9")],
                             ])
             )
-            db.execute(f"UPDATE adminmessageid SET message_id = '{start_main_mneu.message_id}'")
+            app.send_message(message.chat.id, "<strong>جستجوی محصول در ربات فعال است📌</strong>\n\nکافیه <strong>کد</strong> یا <strong>اسم </strong> محصول مورد نظرتو بفرستی👌\n\nیا خودش رو پیدا میکنم یا مشابه اش رو😉",
+                            parse_mode = "html")
+            db.execute(f"UPDATE chat_id SET message_id = '{start_main_mneu.message_id}'")
             mydb.commit()
 
 
 
-    if len(command) == 2:
-        if (command[0], command[1]) == ("admin", "vajdi"):
-            global AdminMainMessage
-            AdminMainMessage = app.send_message(
-                        chat_id,
-                        "شما ادمین هستید",
-                        reply_markup = InlineKeyboardMarkup([
-                                                [InlineKeyboardButton("مدیریت محصولات 🛍", callback_data = "product_management")],
-                                                [InlineKeyboardButton("مدیریت فروشگاه 🏪", callback_data = "store_management")],
-                                                [InlineKeyboardButton("مدیریت ربات ⚙️🤖", callback_data = "bot_management")]
+    if command[0] == "admin":
+        db.execute("SELECT value FROM settings WHERE name = 'password'")
+        password = db.fetchone()[0]
+        if len(command) == 2:
+            if (command[0], command[1]) == ("admin", f"{password}"):
+                global AdminMainMessage
+                AdminMainMessage = app.send_message(
+                            chat_id,
+                            "شما ادمین هستید",
+                            reply_markup = InlineKeyboardMarkup([
+                                                    [InlineKeyboardButton("مدیریت محصولات 🛍", callback_data = "product_management")],
+                                                    [InlineKeyboardButton("مدیریت فروشگاه 🏪", callback_data = "store_management")],
+                                                    [InlineKeyboardButton("مدیریت ربات 🤖", callback_data = "bot_management")]
 
-                                            ])
+                                                ])
 
-                        )
+                            )
 
 
-            db.execute("SELECT MAX(id)  FROM adminmessageid")
-            if db.fetchone()[0] == None:
-                db.execute(f"INSERT INTO adminmessageid (message_id) VALUES ({AdminMainMessage.message_id})")
+                db.execute("SELECT MAX(id)  FROM adminmessageid")
+                if db.fetchone()[0] == None:
+                    db.execute(f"INSERT INTO adminmessageid (message_id) VALUES ({AdminMainMessage.message_id})")
+                    mydb.commit()
+                else:
+                    db.execute(f"UPDATE adminmessageid SET message_id = {AdminMainMessage.message_id}")
+                    mydb.commit()
+
+                #check status row in settings table
+                db.execute(f"SELECT value FROM settings WHERE name = '{chat_id}'")
+                if db.fetchone() == None:
+                    db.execute(f"INSERT INTO settings (name, value) VALUES ('{chat_id}', 'admin')")
+                else:
+                    db.execute(f"UPDATE settings SET value = 'admin' WHERE name = '{chat_id}'")
                 mydb.commit()
+
             else:
-                db.execute(f"UPDATE adminmessageid SET message_id = {AdminMainMessage.message_id}")
-                mydb.commit()
-
+                app.send_message(chat_id, "رمز عبور اشتباه است ⛔️")
 
 #variable for product
 
@@ -266,6 +304,8 @@ def GetContact(client, message):
     global get_auth_code
     get_auth_code = True
 
+
+
 @app.on_callback_query()
 def CallBack(client, message):
     vars()
@@ -284,7 +324,62 @@ def CallBack(client, message):
     global get_product_unit_or_not
     global get_product_price_or_not
 
+    #forward message to all users
+    if data == "forward_pm_to_all":
+        client.answer_callback_query(callback_id, "")
+        app.send_message(chat_id, "💤پیام مورد نظرتو بفرست...")
+        global forward_to_all
+        forward_to_all = True
+
+    #send message to all users
+    if data == "send_pm_to_all":
+        client.answer_callback_query(callback_id, "")
+        app.send_message(chat_id, "🔅پیام مورد نظرتو بفرست...")
+        global message_to_all
+        message_to_all = True
+
+    #change store password
+    if data == "change_store_password":
+        global get_new_password
+        get_new_password = True
+        client.answer_callback_query(callback_id, "رمز جدید را ارسال کنید...", show_alert = True)
+
+    #submit delete product from cart
+    if data.startswith("delete_product_button_cart_"):
+        client.answer_callback_query(callback_id, "")
+        submit_delete_product = data.split("_")[-1]
+        #get user
+        db.execute(f"SELECT id FROM users WHERE user_id = '{message.from_user.id}'")
+        user = db.fetchone()[0]
+
+        #delete product from cart
+        db.execute(f"DELETE from cart WHERE product = '{submit_delete_product}' AND user = '{user}'")
+        mydb.commit()
+
+        #delete message
+        db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{chat_id}'")
+        message_id = db.fetchone()[0]
+        app.delete_messages(chat_id, message_id)
+        #send success message
+        app.send_message(chat_id,"محصول مورد نظر از سبد خرید شما حذف شد ✅")
+
+        # send cart menu
+        gg = app.send_message(
+                        chat_id,
+                        text = "🔘 بخش سبد خرید\n\nتو این بخش میتونی عملکرد های زیر رو روی سبد خریدت داشته باشی👇",
+                        reply_markup = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("📝 لیست محصولات موجود در سبد خرید 🛒", callback_data = "cart_list")],
+                            [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_to_cart_btn")],
+                            [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product_cart")],
+                            [InlineKeyboardButton("برگشت »", callback_data = "back_to_start_menu")]
+
+                        ])
+                )
+        db.execute(f"UPDATE chat_id SET message_id = '{gg.message_id}'")
+        mydb.commit()
+
     if data == "delete_product_cart":
+        client.answer_callback_query(callback_id, "")
         app.send_message(chat_id, "📌 لطفا کد محصول مورد نظرت رو بفرست...")
         global get_code_delete_cart
         get_code_delete_cart = True
@@ -295,8 +390,10 @@ def CallBack(client, message):
         cause = db.fetchone()
         if cause != None:
             client.answer_callback_query(callback_id, f"{cause[0]}", show_alert = True)
+
     #add product to cart
     if data.startswith("add_to_cart_"):
+        client.answer_callback_query(callback_id, "")
         if data.split("_")[-1] == "btn":
             app.send_message(chat_id, "📌 لطفا کد محصول مورد نظرت رو بفرست...")
             global get_code_add_to_cart
@@ -321,10 +418,10 @@ def CallBack(client, message):
             global get_product_count_cart
             get_product_count_cart = True
 
-        client.answer_callback_query(callback_id, "")
 
     #show cart
     if data == "customer_see_cart":
+        client.answer_callback_query(callback_id, "")
         db.execute(f"SELECT status FROM cart_info WHERE chat_id = '{chat_id}'")
         status = db.fetchone()
         if status == None or status[0] == "deactive":
@@ -337,6 +434,8 @@ def CallBack(client, message):
                 )
 
         elif status[0] == "active":
+            db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{chat_id}'")
+            message_id = db.fetchone()[0]
             global cart_menu
             cart_menu = app.edit_message_text(
                         chat_id = chat_id,
@@ -357,6 +456,9 @@ def CallBack(client, message):
 
 
     if data == "back_to_start_menu":
+        client.answer_callback_query(callback_id, "")
+        db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{chat_id}'")
+        message_id = db.fetchone()[0]
         app.edit_message_text(
             chat_id,
             message_id,
@@ -366,6 +468,10 @@ def CallBack(client, message):
 
     #cart list
     if data == "cart_list":
+        client.answer_callback_query(callback_id, "")
+        db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{chat_id}'")
+        message_id = db.fetchone()[0]
+
         #wich user want to see own cart?
         db.execute(f"SELECT id FROM users WHERE user_id = '{message.from_user.id}'")
         user = db.fetchone()[0]
@@ -397,14 +503,20 @@ def CallBack(client, message):
 
     #back to cart
     if data == "back_to_cart":
+        client.answer_callback_query(callback_id, "")
+        db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{chat_id}'")
+        message_id = db.fetchone()[0]
+
         app.edit_message_text(
             chat_id,
             message_id,
             text = cart_menu.text,
             reply_markup = cart_menu.reply_markup
         )
+
     #bot management section
     if data == "bot_management":
+        client.answer_callback_query(callback_id, "")
         db.execute("SELECT message_id FROM adminmessageid")
         message_id = db.fetchone()[0]
 
@@ -423,15 +535,21 @@ def CallBack(client, message):
                         text = text,
                         reply_markup = InlineKeyboardMarkup([
                             [InlineKeyboardButton("افزودن کانال یا گروه 👥", callback_data = "add_group_or_channel_to_bot")],
-                            #[InlineKeyboardButton("ارسال خودکار محصولات جدید به کانال ⬅️", callback_data = "send_automaticlly_to_channel")],
+                            [InlineKeyboardButton("تغییر رمز ورود فروشگاه ☢️", callback_data = "change_store_password")],
+                            [
+                                InlineKeyboardButton("ارسال پیام همگانی 💭", callback_data = "send_pm_to_all"),
+                                InlineKeyboardButton("فرواد پیام همگانی 🔄", callback_data = "forward_pm_to_all")
+                            ],
                             [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
 
                         ])
         )
 
+
     # add group or channel to bot
     global add_group_or_channel_to_bot
     if data == "add_group_or_channel_to_bot":
+        client.answer_callback_query(callback_id, "")
         add_group_or_channel_to_bot = True
         client.answer_callback_query(callback_id, "لینک کانال یا گروه مورد نظرتو بدون @ بفرس...", show_alert = True)
 
@@ -466,6 +584,7 @@ def CallBack(client, message):
 
     #active send to channle
     if data == "active_send_to_channel":
+        client.answer_callback_query(callback_id, "")
         db.execute("SELECT message_id FROM adminmessageid")
         message_id = db.fetchone()[0]
 
@@ -489,6 +608,7 @@ def CallBack(client, message):
 
     #deactive send to channel
     if data == "deactive_send_to_channel":
+        client.answer_callback_query(callback_id, "")
         db.execute("SELECT message_id FROM adminmessageid")
         message_id = db.fetchone()[0]
 
@@ -531,6 +651,7 @@ def CallBack(client, message):
 
     #intro in store_management
     if data == "store_management":
+        client.answer_callback_query(callback_id, "")
         db.execute("SELECT * FROM adminmessageid")
         message_id = db.fetchone()[1]
         global store_management
@@ -555,12 +676,25 @@ def CallBack(client, message):
                                     InlineKeyboardButton("تنظیم نام فروشگاه 🎟", callback_data = "set_shop_name"),
                                     InlineKeyboardButton("پیام خوشامد گویی 🤹‍♂️", callback_data = "set_welcome_text")
                                 ],
+                                [
+                                    InlineKeyboardButton("تنظیم آیدی ارتباط 🆔", callback_data = "set_connection_id")
+                                ],
                                 [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
                             ])
         )
 
         db.execute(f"UPDATE adminmessageid SET message_id = {store_management.message_id}")
         mydb.commit()
+
+    #set connection id
+    if data == "set_connection_id":
+        client.answer_callback_query(
+                                    callback_id,
+                                    "آیدی اکانت رو بدون @ بفرستید...",
+                                    show_alert = True,
+                                )
+        global get_connection_id
+        get_connection_id = True
 
     #set welcome text
     global set_welcome_text
@@ -582,6 +716,7 @@ def CallBack(client, message):
 
     #set_shift_work
     if data == "set_shift_work":
+        client.answer_callback_query(callback_id, "")
         #select admin message id to edit
         db.execute("SELECT message_id FROM adminmessageid")
         message_id = db.fetchone()[0]
@@ -1272,8 +1407,64 @@ def CallBack(client, message):
 
 @app.on_message(filters.text)
 def GetTexts(client, message):
+    global get_new_password
+    global get_connection_id
+    global get_code_delete_cart
+    global get_product_name_or_not
+    global get_product_count_or_not
+    global get_product_unit_or_not
+    global get_product_price_or_not
+    global get_product_description_or_not
+    global sent_product
+    global GetEditCode
+    global code
+    global GetDeleteCode
+    global get_new_discount
+    global set_shift
+    global add_group_or_channel_to_bot
+    global set_welcome_text
+    global set_shop_name
+    global get_auth_code
+    global get_product_count_cart
+    global get_code_add_to_cart
+    global message_to_all
+    global forward_to_all
+
+
+    #giving news password
+    if get_new_password == True:
+        db.execute("SELECT * FROM settings WHERE name = 'password'")
+        if db.fetchone() == None:
+            db.execute(f"INSERT INTO settings (name, value) VALUES ('password', '{message.text}')")
+        else:
+            db.execute(f"UPDATE settings SET value = '{message.text}' WHERE name = 'password'")
+        mydb.commit()
+
+        app.send_message(
+                message.chat.id,
+                f"رمز جدید ثبت شد✅\n\n<strong>رمز جدید : </strong>{message.text}",
+                parse_mode = "html"
+                )
+        get_new_password = False
+
+    #givin account id
+    elif get_connection_id == True:
+        db.execute("SELECT * FROM settings WHERE name = 'id'")
+        if db.fetchone() == None:
+            db.execute(f"INSERT INTO settings (name, value) VALUES ('id', '{message.text}')")
+        else:
+            db.execute(f"UPDATE settings SET value = '{message.text}' WHERE name = 'id'")
+        mydb.commit()
+
+        app.send_message(
+                    message.chat.id,
+                    f"آیدی ارتباط پشتیبانی فروشگاه تنظیم شد✅\n\n<strong>🆔آیدی پشتیبانی :</strong> @{message.text} 👤",
+                    parse_mode = "html"
+                )
+        get_connection_id = False
+
     #givin code to delete product from cart
-    if get_code_delete_cart == True:
+    elif get_code_delete_cart == True:
         delete_code2 = message.text
         if delete_code2.isdigit():
             #select product
@@ -1302,16 +1493,18 @@ def GetTexts(client, message):
                         product["description"] = fetched_data[6]
                         text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
 
-                    app.send_photo(
+                    aa = app.send_photo(
                                     message.chat.id,
                                     photo = product["photo"],
                                     caption = text,
                                     reply_markup = InlineKeyboardMarkup([
-                                        [InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = "delete_product_button")],
+                                        [InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = f"delete_product_button_cart_{delete_product[0]}")],
                                         [InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")]
 
                                     ])
                                 )
+                    db.execute(f"UPDATE chat_id SET message_id = '{aa.message_id}'")
+                    mydb.commit()
 
                 elif delete_product_cart == None:
                     app.send_message(message.chat.id, "شما این محصول را در سبد خرید خود ندارید ⚠️")
@@ -1319,8 +1512,7 @@ def GetTexts(client, message):
                 app.send_message(message.chat.id, "محصول مورد نظر شما یافت نشد⛔️")
 
     #givin product name
-    global get_product_name_or_not
-    if get_product_name_or_not == True:
+    elif get_product_name_or_not == True:
         product["name"] = message.text
         get_product_name_or_not = False
         global NameMessage
@@ -1334,8 +1526,7 @@ def GetTexts(client, message):
 
 
     #giving product count
-    global get_product_count_or_not
-    if get_product_count_or_not == True:
+    elif get_product_count_or_not == True:
         if message.text.isdigit():
             product["count"] = message.text
             get_product_count_or_not = False
@@ -1352,8 +1543,7 @@ def GetTexts(client, message):
                             )
             app.delete_messages(message.chat.id, NameMessage.message_id)
 
-    global get_product_unit_or_not
-    if get_product_unit_or_not == True:
+    elif get_product_unit_or_not == True:
         product["unit"] = message.text
         get_product_unit_or_not = False
         global UnitMessage
@@ -1369,8 +1559,7 @@ def GetTexts(client, message):
         app.delete_messages(message.chat.id, CountMessage.message_id)
 
 
-    global get_product_price_or_not
-    if get_product_price_or_not == True:
+    elif get_product_price_or_not == True:
         if message.text.isdigit():
             product["price"] = message.text
             get_product_price_or_not = False
@@ -1387,9 +1576,7 @@ def GetTexts(client, message):
             )
             app.delete_messages(message.chat.id, UnitMessage.message_id)
 
-    global get_product_description_or_not
-    if get_product_description_or_not == True:
-        global sent_product
+    elif get_product_description_or_not == True:
         product["description"] = message.text
         get_product_description_or_not = False
         app.send_message(
@@ -1406,9 +1593,7 @@ def GetTexts(client, message):
 
 
 
-    global GetEditCode
-    if GetEditCode == True:
-        global code
+    elif GetEditCode == True:
         code = message.text
         db.execute(f"SELECT * FROM product WHERE code = {code}")
         fetched_data = db.fetchone()
@@ -1448,8 +1633,7 @@ def GetTexts(client, message):
 
         GetEditCode = False
 
-    global GetDeleteCode
-    if GetDeleteCode == True:
+    elif GetDeleteCode == True:
         global delete_code
         delete_code = message.text
         db.execute(f"SELECT * FROM product WHERE code = {delete_code}")
@@ -1485,30 +1669,10 @@ def GetTexts(client, message):
 
         GetDeleteCode = False
 
-    try:
-        global edit_product_info
-        global edit_type
-
-        if edit_product_info[edit_type] == True:
-            global variable_edit_after_submiting
-
-            if variable_edit_after_submiting == True:
-                db.execute(f"UPDATE product SET {edit_type} = '{message.text}' WHERE code = {code}")
-                mydb.commit()
-                edit_product_info[edit_type] = False
-
-            else:
-                product[edit_type] = message.text
-                edit_product_info[edit_type] = False
-
-            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
-
-    except Exception as ex:
-        pass
 
 
-    global get_new_discount
-    if get_new_discount == True:
+
+    elif get_new_discount == True:
         percent = message.text.split()[0]
         cause = " ".join(message.text.split()[1:])
         db.execute(f"INSERT INTO discounts (percent, status, cause) VALUES ('{percent}', 'active', '{cause}')")
@@ -1545,8 +1709,7 @@ def GetTexts(client, message):
 
         keys = []
 
-    global set_shift
-    if set_shift == True:
+    elif set_shift == True:
         db.execute("SELECT value FROM settings WHERE name = 'shif_text'")
         if db.fetchone() == None:
             db.execute(f"INSERT INTO settings (name, value) VALUES ('shif_text', '{message.text}')")
@@ -1558,8 +1721,7 @@ def GetTexts(client, message):
         set_shift = False
 
     # giving id for set channel
-    global add_group_or_channel_to_bot
-    if add_group_or_channel_to_bot == True:
+    elif add_group_or_channel_to_bot == True:
         db.execute("SELECT value FROM settings WHERE name = 'bot_channel'")
         if db.fetchone() == None:
             db.execute(f"INSERT INTO settings (name, value) VALUES ('bot_channel', '{message.text}')")
@@ -1570,8 +1732,7 @@ def GetTexts(client, message):
         app.send_message(message.chat.id, f"لینک کانال : {message.text}\n\n⛔️توجه⛔️\nربات رو حتما باید توی کانال مورد نظر ادمین کنی تا به درستی کار بکنه. یادت نره\n⚠️همین الان ادمینش کن")
         add_group_or_channel_to_bot = False
 
-    global set_welcome_text
-    if set_welcome_text == True:
+    elif set_welcome_text == True:
         db.execute("SELECT value FROM settings WHERE name = 'welcome_text'")
         if db.fetchone() != None:
             db.execute(f"UPDATE settings SET value = '{message.text}' WHERE name = 'welcome_text'")
@@ -1581,8 +1742,7 @@ def GetTexts(client, message):
         message.reply_text("متن خوشامدگویی فروشگاه دریافت شد ✅")
         set_welcome_text = False
 
-    global set_shop_name
-    if set_shop_name == True:
+    elif set_shop_name == True:
         db.execute("SELECT value FROM settings WHERE name = 'shop_name'")
         if db.fetchone() != None:
             db.execute(f"UPDATE settings SET value = '{message.text}' WHERE name = 'shop_name'")
@@ -1592,8 +1752,7 @@ def GetTexts(client, message):
         message.reply_text("نام فروشگاه شما دریافت شد ✅")
         set_shop_name = False
 
-    global get_auth_code
-    if get_auth_code == True:
+    elif get_auth_code == True:
         get_code = message.text
         db.execute(f"SELECT code FROM cart_code WHERE chat_id = '{message.chat.id}'")
         db_code = db.fetchone()[0]
@@ -1609,23 +1768,26 @@ def GetTexts(client, message):
             app.delete_messages(message.chat.id, message_id)
             db.execute("SELECT value FROM settings WHERE name = 'welcome_text'")
             welcome_text = db.fetchone()[0]
+            db.execute("SELECT value FROM settings WHERE name = 'id'")
+            id = db.fetchone()[0]
             a = app.send_message(
                             message.chat.id,
                             text = welcome_text,
                             reply_markup = InlineKeyboardMarkup([
-                                [InlineKeyboardButton("👁مشاهده محصول 🛍", callback_data = "customer_show_product")],
                                 [InlineKeyboardButton("سبد خرید 🛒", callback_data = "customer_see_cart")],
-                                [InlineKeyboardButton("ارتباط با پشتیبانی فروشگاه 👤", callback_data = "contact_shop_support")],
-                                [InlineKeyboardButton("💻 ارتباط به برنامه نویس ربات 💻", callback_data = "contact_bot_programmer")]
+                                [InlineKeyboardButton("ارتباط با پشتیبانی فروشگاه 👤", url = f"https://t.me/{id}")],
+                                [InlineKeyboardButton("💻 ارتباط به برنامه نویس ربات 💻", url = "https://t.me/hasan_zltn9")]
                             ])
             )
+
+            app.send_message(message.chat.id, "<strong>جستجوی محصول در ربات فعال است📌</strong>\n\nکافیه <strong>کد</strong> یا <strong>اسم </strong> محصول مورد نظرتو بفرستی👌\n\nیا خودش رو پیدا میکنم یا مشابه اش رو😉",
+                            parse_mode = "html")
             db.execute(f"UPDATE adminmessageid SET message_id = '{a.message_id}'")
             mydb.commit()
         else:
             app.send_message(message.chat.id, "کد اشتباه است🚫\n\nکد صحیح را دوباره ارسال کنید")
 
-    global get_product_count_cart
-    if get_product_count_cart == True:
+    elif get_product_count_cart == True:
         count = message.text
         if count.isdigit():
             db.execute(f"SELECT count FROM product WHERE code = {add_to_cart_dict['product']}")
@@ -1652,8 +1814,12 @@ def GetTexts(client, message):
 
                     app.send_message(
                         message.chat.id,
-                        f"🛍محصول <strong>[ {product_name[0]} ]</strong> به تعداد <strong> [ {count} ]</strong> {product_name[1]} کد  <strong>[ {add_to_cart_dict['product']} ]</strong>\n به سبد خرید شما اضافه شد✅\n\n⚠️اگر محصول موجود در سبد خرید پرداخت نهایی نشود به صورت خودکار بعد از <strong>{cart_hour}</strong> ساعت از سبد شما حذف خواهد شد!"
+                        f"🛍محصول <strong>[ {product_name[0]} ]</strong> کد <strong>[ {add_to_cart_dict['product']} ] به تعداد <strong> [ {count} ]</strong> {product_name[1]}</strong> به سبد خرید شما اضافه شد✅\n\n⚠️اگر محصول موجود در سبد خرید پرداخت نهایی نشود به صورت خودکار بعد از <strong>{cart_hour}</strong> ساعت از سبد شما حذف خواهد شد!"
                     )
+
+                    db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{message.chat.id}'")
+                    message_id = db.fetchone()[0]
+                    app.delete_messages(message.chat.id, message_id)
                 except Exception as m:
                     if m.errno == 1062:
                         app.send_message(
@@ -1678,29 +1844,23 @@ def GetTexts(client, message):
                             parse_mode = "html"
                             )
 
-    global get_code_add_to_cart
-    if get_code_add_to_cart == True:
+    elif get_code_add_to_cart == True:
         code = message.text
         if code.isdigit():
             add_to_cart_dict["code"] = code
-            print("yessss")
-
             db.execute(f"SELECT * FROM product WHERE code = {int(add_to_cart_dict['code'])}")
             fetched_data = db.fetchone()
 
             if fetched_data != None:
-                print('get user')
                 #get user
                 db.execute(f"SELECT id FROM users WHERE user_id = '{message.from_user.id}'")
                 user = db.fetchone()[0]
-
 
                 #check cart
                 db.execute(f"SELECT * FROM cart WHERE product = '{int(fetched_data[0])}' AND user = '{user}'")
                 product_status = db.fetchone()
 
                 if product_status == None:
-                    print("send product")
                     product["photo"] = fetched_data[1]
                     product["name"] = fetched_data[2]
                     product["count"] = fetched_data[3]
@@ -1721,12 +1881,13 @@ def GetTexts(client, message):
                             InlineKeyboardButton("خرید 💳", callback_data = "buy_product"),
                         ]
                     ]
+
                     if discount != None:
                         product_see_keys.append([InlineKeyboardButton("🎉 علت تخفیف 🎉", callback_data = "discount_cause")])
                         finally_price = int(product['price']) - (int(product['price']) // 100) * int(discount[0])
                         text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong> هزار تومان"
 
-                    app.send_photo(
+                    cc = app.send_photo(
                                     message.chat.id,
                                     photo = product["photo"],
                                     caption = text,
@@ -1734,12 +1895,15 @@ def GetTexts(client, message):
                                     parse_mode = "html"
                             )
 
+                    db.execute(f"UPDATE chat_id SET message_id = '{cc.message_id}'")
+                    mydb.commit()
+
                     get_code_add_to_cart = False
 
                 else:
                     app.send_message(
                         message.chat.id,
-                        "<strong>شما قبلا این محصول رو به سبد خریدتون اضافه کردین❗️</strong>",
+                        "<strong>شما قبلا این محصول رو به سبد خریدتون اضافه کردین❗️</strong>\n\n",
                         parse_mode = "html",
                         reply_markup = InlineKeyboardMarkup([
                             [
@@ -1748,30 +1912,71 @@ def GetTexts(client, message):
                             ]
                         ])
                     )
+                    get_code_add_to_cart = False
+
             else:
                 app.send_message(message.chat.id, "محصول مورد نظر شما یافت نشد🙅‍♂️⛔️")
         else:
             app.send_message(message.chat.id, "لطفا عدد بفرستید...")
-    #if get_count_add_to_cart == True:
-    #    count = message.text
-    #    if count.isdigit():
-    #        add_to_cart_dict["count"] = count
-    #        get_count_add_to_cart = False
-#
-    #        db.execute("SELECT value FROM settings WHERE name = 'cart_hour'")
-    #        cart_hour = db.fetchone()[0]
-#
-    #        db.execute(f"INSERT INTO cart (product, user, count) VALUES ('{add_to_cart_dict['code']}', '{user}', {add_to_cart_dict['count']})")
-    #        mydb.commit()
-#
-    #        app.send_message(
-    #                    message.chat.id,
-    #                    f"🛍محصول <strong>[ {fetched_data[2]} ]</strong> به تعداد <strong> [ {count} ]</strong> {fetched_data[4]} کد  <strong>[ {fetched_data[0]} ]</strong>\n به سبد خرید شما اضافه شد✅\n\n⚠️اگر محصول موجود در سبد خرید پرداخت نهایی نشود به صورت خودکار بعد از <strong>{cart_hour}</strong> ساعت از سبد شما حذف خواهد شد!"
-#
-    #                )
 
+    #giving message to send all users
+    elif message_to_all == True:
+        db.execute(f"SELECT name FROM settings WHERE name = '{message.chat.id}'")
+        admin_id = db.fetchone()[0]
+        db.execute("SELECT user_id FROM users")
+        counter = 0
+        counter2 = 0
+        for i in db.fetchall():
+            if i[0] != admin_id:
+                try:
+                    app.send_message(int(i[0]), f"{message.text}")
+                    counter += 1
+                except BadRequest:
+                    counter2 += 1
 
+        app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
+        message_to_all = False
 
+    elif forward_to_all == True:
+        db.execute(f"SELECT name FROM settings WHERE name = '{message.chat.id}'")
+        admin_id = db.fetchone()[0]
+        db.execute("SELECT user_id FROM users")
+        counter = 0
+        counter2 = 0
+        for i in db.fetchall():
+            if i[0] != admin_id:
+                try:
+                    app.forward_messages(f"{i[0]}", f"{admin_id}", message.message_id)
+                    counter += 1
+                    print("yess")
+                except BadRequest:
+                    counter2 += 1
+
+        app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
+        forward_to_all = False
+    else:
+        print(message.text)
+
+    try:
+        global edit_product_info
+        global edit_type
+
+        if edit_product_info[edit_type] == True:
+            global variable_edit_after_submiting
+
+            if variable_edit_after_submiting == True:
+                db.execute(f"UPDATE product SET {edit_type} = '{message.text}' WHERE code = {code}")
+                mydb.commit()
+                edit_product_info[edit_type] = False
+
+            else:
+                product[edit_type] = message.text
+                edit_product_info[edit_type] = False
+
+            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
+
+    except Exception as ex:
+        print("nooo")
 
 @app.on_message(filters.photo)
 def GetProductImage(client, message):
@@ -1786,7 +1991,7 @@ def GetProductImage(client, message):
         get_product_name_or_not = True
 
 
-def SendAddedProduct(client, messagem, chat_id):
+def SendAddedProduct(client, message, chat_id):
     global sent_product
     try:
         sent_product = app.send_photo(
