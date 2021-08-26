@@ -11,6 +11,8 @@ import requests
 #used in convert date
 import jdatetime
 
+import datetime
+from datetime import timedelta
 #pyrogram
 from pyrogram import Client, filters
 from pyrogram.errors import BadRequest, Forbidden
@@ -136,15 +138,14 @@ def main(client, message):
     command = message.command
     chat_id = message.chat.id
 
-    # check user chat id
-    db.execute(f"SELECT * FROM chat_id WHERE chat_id  = '{message.chat.id}'")
-    if db.fetchone() == None:
-        db.execute(f"INSERT INTO chat_id (chat_id, message_id) VALUES ('{message.chat.id}', '0')")
-        mydb.commit()
-
-
     #start normally
     if command[0] == "start":
+        # check user chat id
+        db.execute(f"SELECT * FROM chat_id WHERE chat_id  = '{message.chat.id}'")
+        if db.fetchone() == None:
+            db.execute(f"INSERT INTO chat_id (chat_id, message_id) VALUES ('{message.chat.id}', '0')")
+            mydb.commit()
+
         db.execute(f"UPDATE settings SET value = 'start' WHERE name = '{chat_id}'")
         mydb.commit()
 
@@ -243,7 +244,8 @@ def main(client, message):
                             reply_markup = InlineKeyboardMarkup([
                                                     [InlineKeyboardButton("مدیریت محصولات 🛍", callback_data = "product_management")],
                                                     [InlineKeyboardButton("مدیریت فروشگاه 🏪", callback_data = "store_management")],
-                                                    [InlineKeyboardButton("مدیریت ربات 🤖", callback_data = "bot_management")]
+                                                    [InlineKeyboardButton("مدیریت ربات 🤖", callback_data = "bot_management")],
+                                                    [InlineKeyboardButton("مدیریت کاربران 👥", callback_data = "users_management")],
 
                                                 ])
 
@@ -323,6 +325,114 @@ def CallBack(client, message):
     global get_product_description_or_not
     global get_product_unit_or_not
     global get_product_price_or_not
+
+    #manage user llsts
+    if data.startswith("user_list_"):
+        type = data.split("_")[-1]
+
+        if type == "today":
+            date = datetime.date.today()
+            db.execute(f"SELECT * FROM users WHERE date = '{date}'")
+            userlist = db.fetchall()
+        elif type == "yesterday":
+            date = datetime.date.today() - datetime.timedelta(days = 1)
+            db.execute(f"SELECT * FROM users WHERE date = '{date}'")
+            userlist = db.fetchall()
+        elif type == "thisweek":
+            today = datetime.date.today()
+            date = datetime.date.today() - datetime.timedelta(weeks = 1)
+            db.execute(f"SELECT * FROM users WHERE date BETWEEN '{date}' AND '{today}'")
+            userlist = db.fetchall()
+        elif type == "thismonth":
+            today = datetime.date.today()
+            date = datetime.date.today() - datetime.timedelta(days = 30)
+            db.execute(f"SELECT * FROM users WHERE date BETWEEN '{date}' AND '{today}'")
+            userlist = db.fetchall()
+
+
+        if len(userlist) == 0:
+            client.answer_callback_query(callback_id,  "کاربری وجود ندارد⛔️", show_alert = True)
+        elif len(userlist) > 3:
+            wb = Workbook()
+            sheet = wb.add_sheet("لیست کاربران")
+            sheet.cols_right_to_left = True
+            sheet.write(0,0, "آیدی")
+            sheet.write(0,1, "آیدی عددی")
+            sheet.write(0,2, "تاریخ")
+
+            counter_row = 1
+            counter_column = 0
+
+            for user in userlist:
+                date = user[-1]
+                user = list(user)
+                del user[-1]
+                date = str(date).split("-")
+                date = jdatetime.date.fromgregorian(day = int(date[2]), month = int(date[1]), year = int(date[0]))
+                date = str(date).split("-")[0] + "/" + str(date).split("-")[1] + "/" + str(date).split("-")[2]
+                user.append(date)
+
+                user = tuple(user)
+
+                for i in user:
+                    sheet.write(counter_row,counter_column, f"{i}")
+                    counter_column += 1
+                counter_column = 0
+                counter_row += 1
+
+            wb.save('کل تخفیف ها.xls')
+            #send saved file to admin
+            app.send_document(chat_id, 'کل تخفیف ها.xls', caption = "👥همه کاربر های فروشگاه شما از ابتدای راه اندازی\n📂به صورت فایل اکسل")
+
+        elif len(userlist) < 10:
+            text = ""
+            counter = 1
+            for i in userlist:
+                text += f"{counter} - <a href = 'tg://user?id={i[1]}'>{i[1]}</a>\n"
+                counter += 1
+
+            app.edit_message_text(
+                chat_id,
+                message_id,
+                text = text,
+                reply_markup = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("برگشت »", callback_data = "back_to_user_management")
+                    ]
+                ]),
+                parse_mode = "html"
+            )
+
+    # back to user management buttons
+
+
+    #users management
+    if data == "users_management":
+        client.answer_callback_query(callback_id, "")
+        global users_management_message
+        users_management_message = app.edit_message_text(
+                chat_id,
+                message_id,
+                text = "🔘 مدیریت کاربران\n\n👥 تو این بخش میتونی عملکرد های زیر رو روی کاربران فروشگاهت داشته باشی 👇",
+                reply_markup = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("کاربران دیروز", callback_data = "user_list_yesterday"),
+                        InlineKeyboardButton("کاربران امروز", callback_data = "user_list_today")
+                    ],
+                    [
+                        InlineKeyboardButton("کاربران این ماه", callback_data = "user_list_thismonth"),
+                        InlineKeyboardButton("کاربران این هفته", callback_data = "user_list_thisweek")
+                    ],
+                    [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
+                ])
+                )
+    if data == "back_to_user_management":
+        app.edit_message_text(
+            chat_id,
+            message_id,
+            text = users_management_message.text,
+            reply_markup = users_management_message.reply_markup
+        )
 
     #forward message to all users
     if data == "forward_pm_to_all":
@@ -540,6 +650,7 @@ def CallBack(client, message):
                                 InlineKeyboardButton("ارسال پیام همگانی 💭", callback_data = "send_pm_to_all"),
                                 InlineKeyboardButton("فرواد پیام همگانی 🔄", callback_data = "forward_pm_to_all")
                             ],
+
                             [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
 
                         ])
@@ -1073,6 +1184,7 @@ def CallBack(client, message):
 
         #db.execute("UPDATE status SET ")
     if data == "add_new_discount":
+        global get_new_discount
         client.answer_callback_query(
                                 callback_id,
                                 "⚠️ توجه : تخفیف افزوده شده به عنوان تخفیف فعال محسوب میشه و روی همه محصولات فروشگاهت اعمال میشه\n\n🔻درصد تخفیف و  علت تخفیف رو به صورت زیر بفرست :‌\n15 عید نوروز",
@@ -1367,7 +1479,6 @@ def CallBack(client, message):
     if data == "see_all_pervios_discounts":
         counter_row = 1
         counter_column = 0
-
 
         wb = Workbook()
         sheet = wb.add_sheet("لیست تخفیف ها")
