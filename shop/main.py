@@ -353,6 +353,32 @@ def CallBack(client, message):
     global get_product_unit_or_not
     global get_product_price_or_not
 
+    #store amar
+    if data == "store_amar":
+        app.edit_message_text(
+            chat_id,
+            message_id,
+            text = "🔘 آمار فروشگاه\n\nتو این بخش میتونی آمار فروشگاهت رو مشاهده کنی👇",
+            reply_markup = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(" محصولات دیروز", callback_data = "product_list_yesterday"),
+                    InlineKeyboardButton("محصولات امروز", callback_data = "product_list_today")
+                ],
+                [
+                    InlineKeyboardButton("محصولات این ماه", callback_data = "product_list_thismonth"),
+                    InlineKeyboardButton("محصولات این هفته", callback_data = "product_list_thisweek")
+                ],
+                [
+                    InlineKeyboardButton("کل محصولات 🛍", callback_data = "product_list_all")
+                ],
+                [
+                    InlineKeyboardButton("مشاهده محصولات موجود در سبد خرید 📃", callback_data = "see_all_cart_product")
+                ],
+                [
+                    InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
+                ]
+            ])
+        )
     #manage products list
     if data.startswith("product_list_"):
         type = data.split("_")[-1]
@@ -869,27 +895,10 @@ def CallBack(client, message):
             message_id = message_id,
             text = "🔘 مدیریت محصولات \n\n 🛍 تو این بخش میتونی عملکرد های زیر رو روی محصولات فروشگاهت داشته باشی 👇",
             reply_markup = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product"),
-                    InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")
-                ],
-                [
-                    InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product"),
-                ],
-                [
-                    InlineKeyboardButton(" محصولات دیروز", callback_data = "product_list_yesterday"),
-                    InlineKeyboardButton("محصولات امروز", callback_data = "product_list_today")
-                ],
-                [
-                    InlineKeyboardButton("محصولات این ماه", callback_data = "product_list_thismonth"),
-                    InlineKeyboardButton("محصولات این هفته", callback_data = "product_list_thisweek")
-                ],
-                [
-                    InlineKeyboardButton("کل محصولات", callback_data = "product_list_all")
-                ],
-                [
-                    InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")
-                ]
+                [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product")],
+                [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")],
+                [InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product")],
+                [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
             ])
         )
 
@@ -1148,9 +1157,7 @@ def CallBack(client, message):
                                     InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
                                     InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
                                 ],
-                                [
-                                    InlineKeyboardButton("مشاهده محصولات موجود در سبد خرید 📃", callback_data = "see_all_cart_product")
-                                ],
+
                                 [
                                     InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
                                 ],
