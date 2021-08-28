@@ -4,9 +4,8 @@ import mysql.connector
 #exel need
 import xlwt
 from xlwt import Workbook
-
+from apscheduler.schedulers.background import BackgroundScheduler
 import random
-
 import requests
 #used in convert date
 import jdatetime
@@ -43,6 +42,34 @@ app = Client(
     api_hash = "7222730d378cb9618018bdf9825d6a3b",
     bot_token = "1806760795:AAE_uLoH6D0FiIn_sTsSC7RdNeJVm5MPZns"
 )
+
+
+
+def jobs():
+    db.execute("SELECT value FROM settings WHERE name = 'cart_hour'")
+    cart_hour = db.fetchone()[0]
+
+    now = str(datetime.datetime.now().time()).split(":")[0]
+
+    db.execute("SELECT * FROM cart")
+    cart_list = db.fetchall()
+
+    for i in cart_list:
+        cart_time = str(i[3]).split(":")[0]
+        if int(now) - int(cart_time) <= int(cart_hour):
+            db.execute(f"DELETE FROM cart WHERE product = '{i[0]}' AND user = '{i[1]}' AND count = '{i[2]}'")
+            mydb.commit()
+            db.execute(f"SELECT count, reserv FROM product WHERE code = {i[0]}")
+            count = db.fetchone()
+            db.execute(f"UPDATE product SET reserv = '{int(count[1]) - int(i[2])}' WHERE code = '{i[0]}'")
+            mydb.commit()
+
+            db.execute(f"UPDATE product SET count = '{int(count[0]) + int(i[2])}' WHERE code = '{i[0]}'")
+            mydb.commit()
+
+sc = BackgroundScheduler()
+sc.add_job(jobs, "interval", seconds=80)
+sc.start()
 
 
 def vars():
@@ -163,13 +190,13 @@ def main(client, message):
             product["count"] = fetched_data[3]
             product["unit"] = fetched_data[4]
             product["price"] = fetched_data[5]
-
-            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+            product["reserv"] = fetched_data[8]
+            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
 
             if len(fetched_data) == 7:
                 product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
 
 
             #get user
@@ -326,6 +353,75 @@ def CallBack(client, message):
     global get_product_unit_or_not
     global get_product_price_or_not
 
+    #manage products list
+    if data.startswith("product_list_"):
+        type = data.split("_")[-1]
+
+        if type == "today":
+            date = datetime.date.today()
+            db.execute(f"SELECT * FROM product WHERE date = '{date}'")
+            productlist = db.fetchall()
+        elif type == "yesterday":
+            date = datetime.date.today() - datetime.timedelta(days = 1)
+            db.execute(f"SELECT * FROM product WHERE date = '{date}'")
+            productlist = db.fetchall()
+        elif type == "thisweek":
+            today = datetime.date.today()
+            date = datetime.date.today() - datetime.timedelta(weeks = 1)
+            db.execute(f"SELECT * FROM product WHERE date BETWEEN '{date}' AND '{today}'")
+            productlist = db.fetchall()
+        elif type == "thismonth":
+            today = datetime.date.today()
+            date = datetime.date.today() - datetime.timedelta(days = 30)
+            db.execute(f"SELECT * FROM product WHERE date BETWEEN '{date}' AND '{today}'")
+            productlist = db.fetchall()
+        elif type == "all":
+            db.execute("SELECT * FROM product")
+            productlist = db.fetchall()
+
+
+        if len(productlist) == 0:
+            client.answer_callback_query(callback_id,  "محصولی وجود ندارد⛔️", show_alert = True)
+        elif len(productlist) > 3:
+            wb = Workbook()
+            sheet = wb.add_sheet("لیست کاربران")
+            sheet.cols_right_to_left = True
+            sheet.write(0,0, "آیدی")
+            sheet.write(0,1, "نام")
+            sheet.write(0,2, "تعداد")
+            sheet.write(0,3, "واحد")
+            sheet.write(0,4, "قیمت")
+            sheet.write(0,5, "توضیحات")
+            sheet.write(0,6, "تاریخ")
+            sheet.write(0,7, "رزرو شده")
+            sheet.write(0,8, "تعداد بازدید")
+
+
+            counter_row = 1
+            counter_column = 0
+
+            for prod in productlist:
+                date = prod[-3]
+                prod = list(prod)
+                del prod[-3]
+                date = str(date).split("-")
+                date = jdatetime.date.fromgregorian(day = int(date[2]), month = int(date[1]), year = int(date[0]))
+                date = str(date).split("-")[0] + "/" + str(date).split("-")[1] + "/" + str(date).split("-")[2]
+                prod.append(date)
+                del prod[1]
+                prod = tuple(prod)
+
+                for i in prod:
+                    sheet.write(counter_row,counter_column, f"{i}")
+                    counter_column += 1
+                counter_column = 0
+                counter_row += 1
+
+            wb.save('لیست محصولات.xls')
+
+
+            app.send_document(chat_id, 'لیست محصولات.xls', caption = "لیست محصولات\n📂به صورت فایل اکسل")
+
     #manage user llsts
     if data.startswith("user_list_"):
         type = data.split("_")[-1]
@@ -348,11 +444,14 @@ def CallBack(client, message):
             date = datetime.date.today() - datetime.timedelta(days = 30)
             db.execute(f"SELECT * FROM users WHERE date BETWEEN '{date}' AND '{today}'")
             userlist = db.fetchall()
+        elif type == "all":
+            db.execute("SELECT * FROM users")
+            userlist = db.fetchall()
 
 
         if len(userlist) == 0:
             client.answer_callback_query(callback_id,  "کاربری وجود ندارد⛔️", show_alert = True)
-        elif len(userlist) > 3:
+        elif len(userlist) > 0:
             wb = Workbook()
             sheet = wb.add_sheet("لیست کاربران")
             sheet.cols_right_to_left = True
@@ -380,9 +479,10 @@ def CallBack(client, message):
                 counter_column = 0
                 counter_row += 1
 
-            wb.save('کل تخفیف ها.xls')
-            #send saved file to admin
-            app.send_document(chat_id, 'کل تخفیف ها.xls', caption = "👥همه کاربر های فروشگاه شما از ابتدای راه اندازی\n📂به صورت فایل اکسل")
+            wb.save('لیست کاربران.xls')
+
+
+            app.send_document(chat_id, 'لیست کاربران.xls', caption = "👥لیست کاربران فروشگاه شما\n📂به صورت فایل اکسل")
 
         elif len(userlist) < 10:
             text = ""
@@ -423,6 +523,9 @@ def CallBack(client, message):
                         InlineKeyboardButton("کاربران این ماه", callback_data = "user_list_thismonth"),
                         InlineKeyboardButton("کاربران این هفته", callback_data = "user_list_thisweek")
                     ],
+                    [
+                        InlineKeyboardButton("کل کاربران", callback_data = "user_list_all")
+                    ],
                     [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
                 ])
                 )
@@ -458,9 +561,23 @@ def CallBack(client, message):
     if data.startswith("delete_product_button_cart_"):
         client.answer_callback_query(callback_id, "")
         submit_delete_product = data.split("_")[-1]
+
         #get user
         db.execute(f"SELECT id FROM users WHERE user_id = '{message.from_user.id}'")
         user = db.fetchone()[0]
+
+        db.execute(f"SELECT count FROM cart WHERE product = '{submit_delete_product}' AND user = '{user}'")
+        count = db.fetchone()[0]
+
+        db.execute(f"SELECT count, reserv FROM product WHERE code = '{submit_delete_product}'")
+        product_count_reserv = db.fetchone()
+
+        db.execute(f"""UPDATE product
+                       SET count = '{int(product_count_reserv[0]) + int(count)}',
+                       reserv = '{int(product_count_reserv[1]) - int(count)}'
+                       WHERE code = '{submit_delete_product}'
+                       """)
+        mydb.commit()
 
         #delete product from cart
         db.execute(f"DELETE from cart WHERE product = '{submit_delete_product}' AND user = '{user}'")
@@ -503,7 +620,6 @@ def CallBack(client, message):
 
     #add product to cart
     if data.startswith("add_to_cart_"):
-        client.answer_callback_query(callback_id, "")
         if data.split("_")[-1] == "btn":
             app.send_message(chat_id, "📌 لطفا کد محصول مورد نظرت رو بفرست...")
             global get_code_add_to_cart
@@ -753,10 +869,27 @@ def CallBack(client, message):
             message_id = message_id,
             text = "🔘 مدیریت محصولات \n\n 🛍 تو این بخش میتونی عملکرد های زیر رو روی محصولات فروشگاهت داشته باشی 👇",
             reply_markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product")],
-                [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")],
-                [InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product")],
-                [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
+                [
+                    InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product"),
+                    InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")
+                ],
+                [
+                    InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product"),
+                ],
+                [
+                    InlineKeyboardButton(" محصولات دیروز", callback_data = "product_list_yesterday"),
+                    InlineKeyboardButton("محصولات امروز", callback_data = "product_list_today")
+                ],
+                [
+                    InlineKeyboardButton("محصولات این ماه", callback_data = "product_list_thismonth"),
+                    InlineKeyboardButton("محصولات این هفته", callback_data = "product_list_thisweek")
+                ],
+                [
+                    InlineKeyboardButton("کل محصولات", callback_data = "product_list_all")
+                ],
+                [
+                    InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")
+                ]
             ])
         )
 
@@ -940,6 +1073,53 @@ def CallBack(client, message):
                 text = "🔘 تنظیم شیفت کاری\n\nتو این بخش میتونی شیفت کاریِ فروشگاهت رو تنظیم کنی👇",
                 reply_markup = InlineKeyboardMarkup(keys)
             )
+    # send exel file that content all product in cart
+    if data == "see_all_cart_product":
+        db.execute("SELECT * FROM cart")
+        cart_list = db.fetchall()
+
+        wb = Workbook()
+        sheet = wb.add_sheet("سبد خرید")
+        sheet.cols_right_to_left = True
+
+        sheet.write(0,0, "آیدی محصول")
+        sheet.write(0,1, "نام")
+        sheet.write(0,2, "تعداد باقی مانده")
+        sheet.write(0,3, "قیمت محصول")
+        sheet.write(0,4, "تاریخ")
+        sheet.write(0,5, "تعداد در سبد مشتری")
+        sheet.write(0,6, "تعداد درخواست مشاهده")
+        sheet.write(0,7, "کاربر")
+
+        counter_row = 1
+        counter_column = 0
+
+        for i in cart_list:
+            db.execute(f"SELECT code,name,count,price,date,reserv,seen FROM product WHERE code = '{i[0]}'")
+            product_ex = db.fetchone()
+            product_ex = list(product_ex)
+            date = str(product_ex[4]).split("-")
+            date = jdatetime.date.fromgregorian(day = int(date[2]), month = int(date[1]), year = int(date[0]))
+            date = str(date).split("-")[0] + "/" + str(date).split("-")[1] + "/" + str(date).split("-")[2]
+            del product_ex[4]
+            product_ex.insert(4, date)
+
+            db.execute(f"SELECT * FROM users WHERE id = '{i[1]}'")
+            user = db.fetchone()
+
+            product_ex.append(user[1])
+
+            for i in product_ex:
+                sheet.write(counter_row,counter_column, f"{i}")
+                counter_column += 1
+
+            counter_column = 0
+            counter_row += 1
+
+        wb.save("سبد خرید.xls")
+        app.send_document(chat_id, "سبد خرید.xls")
+
+
     #cart
     if data == "cart":
         db.execute("SELECT * FROM settings WHERE name = 'cart_active'")
@@ -967,6 +1147,9 @@ def CallBack(client, message):
                                 [
                                     InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
                                     InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
+                                ],
+                                [
+                                    InlineKeyboardButton("مشاهده محصولات موجود در سبد خرید 📃", callback_data = "see_all_cart_product")
                                 ],
                                 [
                                     InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
@@ -1351,6 +1534,7 @@ def CallBack(client, message):
         product["count"] = fetched_data[3]
         product["unit"] = fetched_data[4]
         product["price"] = fetched_data[5]
+        product["reserv"] = fetched_data[8]
 
         text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
@@ -1616,26 +1800,36 @@ def GetTexts(client, message):
                 if delete_product_cart != None:
                     product["photo"] = delete_product[1]
                     product["name"] = delete_product[2]
-                    product["count"] = delete_product[3]
+                    product["count"] = delete_product_cart[2]
                     product["unit"] = delete_product[4]
                     product["price"] = delete_product[5]
+                    product["reserv"] = delete_product[8]
 
-                    text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+                    text = f"🔗{product['name']}\n\nتعداد درخواستی شما : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
 
                     if len(delete_product) == 7:
                         product["description"] = fetched_data[6]
                         text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
 
+                    delete_product_keys = [
+                        [InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = f"delete_product_button_cart_{delete_product[0]}")],
+                        [InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")]
+                    ]
+
+                    #select active discount
+                    db.execute("SELECT percent, cause FROM discounts WHERE status = 'active'")
+                    discount = db.fetchone()
+                    if discount != None:
+                        delete_product_keys.append([InlineKeyboardButton("🎉 علت تخفیف 🎉", callback_data = "discount_cause")])
+                        finally_price = int(product['price']) - (int(product['price']) // 100) * int(discount[0])
+                        text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong> هزار تومان"
+
                     aa = app.send_photo(
                                     message.chat.id,
                                     photo = product["photo"],
                                     caption = text,
-                                    reply_markup = InlineKeyboardMarkup([
-                                        [InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = f"delete_product_button_cart_{delete_product[0]}")],
-                                        [InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")]
-
-                                    ])
+                                    reply_markup = InlineKeyboardMarkup(delete_product_keys)
                                 )
                     db.execute(f"UPDATE chat_id SET message_id = '{aa.message_id}'")
                     mydb.commit()
@@ -1736,6 +1930,7 @@ def GetTexts(client, message):
         product["count"] = fetched_data[3]
         product["unit"] = fetched_data[4]
         product["price"] = fetched_data[5]
+        product["reserv"] = fetched_data[8]
 
         text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
@@ -1778,6 +1973,7 @@ def GetTexts(client, message):
         product["count"] = fetched_data[3]
         product["unit"] = fetched_data[4]
         product["price"] = fetched_data[5]
+        product["reserv"] = fetched_data[8]
 
         text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
@@ -1934,12 +2130,17 @@ def GetTexts(client, message):
                     mydb.commit()
 
 
-                    #get product name
-                    db.execute(f"SELECT name,unit,code FROM product WHERE code = {add_to_cart_dict['product']}")
+                    #get product
+                    db.execute(f"SELECT name,unit,code, count FROM product WHERE code = {add_to_cart_dict['product']}")
                     product_name = db.fetchone()
 
                     #add count to reserv column in product table
-                    db.execute(f"UPDATE product SET reserv = {count} WHERE code = {product_name[2]}")
+                    db.execute(f"SELECT reserv FROM product WHERE code = '{product_name[2]}'")
+                    reserv_count = db.fetchone()[0]
+                    db.execute(f"UPDATE product SET reserv = '{int(reserv_count) + int(count)}' WHERE code = '{product_name[2]}'")
+                    mydb.commit()
+
+                    db.execute(f"UPDATE product SET count = '{int(product_name[3]) - (int(reserv_count) + int(count))}' WHERE code = '{product_name[2]}'")
                     mydb.commit()
 
                     #get hour for delete product from cart
@@ -1955,22 +2156,7 @@ def GetTexts(client, message):
                     message_id = db.fetchone()[0]
                     app.delete_messages(message.chat.id, message_id)
                 except Exception as m:
-                    if m.errno == 1062:
-                        app.send_message(
-                            message.chat.id,
-                            "<strong>شما قبلا این محصول رو به سبد خریدتون اضافه کردین❗️</strong>",
-                            parse_mode = "html",
-                            reply_markup = InlineKeyboardMarkup([
-                                [
-                                    InlineKeyboardButton("مشاهده سبد خرید 🛒", callback_data = "customer_see_cart"),
-                                    InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = "delete_product_cart")
-                                ]
-                            ])
-                        )
-                        get_product_count_cart = False
-                    else:
-                        print(m)
-
+                    pass
             else:
                 app.send_message(
                             message.chat.id,
@@ -2000,12 +2186,13 @@ def GetTexts(client, message):
                     product["count"] = fetched_data[3]
                     product["unit"] = fetched_data[4]
                     product["price"] = fetched_data[5]
+                    product["reserv"] = fetched_data[8]
 
-                    text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+                    text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
 
                     if len(fetched_data) == 7:
                         product["description"] = fetched_data[6]
-                        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong> \nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
 
                     db.execute("SELECT percent, cause FROM discounts WHERE status = 'active'")
                     discount = db.fetchone()
@@ -2113,7 +2300,7 @@ def SendAddedProduct(client, message, chat_id):
     try:
         sent_product = app.send_photo(
                     chat_id, photo = product["photo"],
-                    caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
+                    caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
                     reply_markup = InlineKeyboardMarkup(
                         [
                             [
@@ -2127,7 +2314,7 @@ def SendAddedProduct(client, message, chat_id):
     except KeyError:
         sent_product = app.send_photo(
                         chat_id,
-                        photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
+                        photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
                         reply_markup = InlineKeyboardMarkup(
                             [
                                 [
