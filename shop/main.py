@@ -24,23 +24,34 @@ logging.basicConfig(level = logging.DEBUG,
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-#connect to mysql server
-mydb = mysql.connector.connect(
-  host="localhost",
-  user = "root",
-  password = "99609970",
-  database = "shop",
-  auth_plugin = 'mysql_native_password'
-)
 
-#create instance
-db = mydb.cursor()
+def DbConnect():
+    global mydb
+    global db
+
+    #connect to mysql server
+    mydb = mysql.connector.connect(
+      host="localhost",
+      user = "root",
+      password = "99609970",
+      database = "shop",
+      auth_plugin = 'mysql_native_password'
+    )
+
+    #create instance
+    db = mydb.cursor()
+
+
+database = BackgroundScheduler()
+database.add_job(DbConnect, "interval", seconds = 600)
+database.start()
+DbConnect()
 
 app = Client(
     "shop",
     api_id = 571145,
     api_hash = "7222730d378cb9618018bdf9825d6a3b",
-    bot_token = "1806760795:AAE_uLoH6D0FiIn_sTsSC7RdNeJVm5MPZns"
+    bot_token = "1938736217:AAHCB0QawPNq_NAi_pmDXeGrEsNm_qrb8pw"
 )
 
 
@@ -62,7 +73,7 @@ def NumberConverter(number):
         try:
             new_number += en_num[i]
         except KeyError:
-            new_number = number
+            new_number += i
 
     return new_number
 
@@ -146,6 +157,8 @@ def vars():
 
     global get_new_discount
     get_new_discount = False
+
+    global variable_edit_after_submiting
     variable_edit_after_submiting = False
 
     global add_to_cart_dict
@@ -220,12 +233,12 @@ def main(client, message):
             product["unit"] = fetched_data[4]
             product["price"] = fetched_data[5]
             product["reserv"] = fetched_data[8]
-            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
             if len(fetched_data) == 7:
                 product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
 
             #get user
@@ -255,7 +268,7 @@ def main(client, message):
             if discount != None:
                 product_see_keys.append([InlineKeyboardButton("🎉 علت تخفیف 🎉", callback_data = "discount_cause")])
                 finally_price = int(product['price']) - (int(product['price']) // 100) * int(discount[0])
-                text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong> هزار تومان"
+                text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong> تومان"
 
             app.send_photo(
                             chat_id,
@@ -287,9 +300,12 @@ def main(client, message):
                                 [InlineKeyboardButton("💻 ارتباط به برنامه نویس ربات 💻", url = "https://t.me/hasan_zltn9")],
                             ])
             )
-            app.send_message(message.chat.id, "<strong>جستجوی محصول در ربات فعال است📌</strong>\n\nکافیه <strong>کد</strong> یا <strong>اسم </strong> محصول مورد نظرتو بفرستی👌\n\nیا خودش رو پیدا میکنم یا مشابه اش رو😉",
-                            parse_mode = "html")
-            db.execute(f"UPDATE chat_id SET message_id = '{start_main_mneu.message_id}'")
+            app.send_message(
+                                message.chat.id,
+                                "<strong>جستجوی محصول در ربات فعال است📌</strong>\n\nکافیه <strong>کد</strong> یا <strong>اسم </strong> محصول مورد نظرتو بفرستی👌\n\nیا خودش رو پیدا میکنم یا مشابه اش رو😉",
+                                parse_mode = "html"
+                            )
+            db.execute(f"UPDATE chat_id SET message_id = '{start_main_mneu.message_id}' WHERE chat_id = '{message.chat.id}'")
             mydb.commit()
 
 
@@ -396,6 +412,11 @@ def CallBack(client, message):
     global get_product_description_or_not
     global get_product_unit_or_not
     global get_product_price_or_not
+
+
+    if data == "cancel_delete_product_from_cart":
+        app.delete_messages(chat_id, message.message.message_id)
+
 
     #store amar
     if data == "store_amar":
@@ -624,6 +645,7 @@ def CallBack(client, message):
         app.send_message(chat_id, "🔅پیام مورد نظرتو بفرست...")
         global message_to_all
         message_to_all = True
+        SendMessageToAll(message, client)
 
     #change store password
     if data == "change_store_password":
@@ -699,31 +721,50 @@ def CallBack(client, message):
 
     #add product to cart
     if data.startswith("add_to_cart_"):
-        if data.split("_")[-1] == "btn":
-            app.send_message(chat_id, "📌 لطفا کد محصول مورد نظرت رو بفرست...")
-            global get_code_add_to_cart
-            get_code_add_to_cart = True
-            client.answer_callback_query(callback_id, "")
+        db.execute(f"SELECT status FROM cart_info WHERE user_id = '{message.from_user.id}'")
+        user_cart_status = db.fetchone()
+        if user_cart_status != None:
+            if user_cart_status[0] == "active":
+                if data.split("_")[-1] == "btn":
+                    app.send_message(chat_id, "📌 لطفا کد محصول مورد نظرت رو بفرست...")
+                    global get_code_add_to_cart
+                    get_code_add_to_cart = True
+                    client.answer_callback_query(callback_id, "")
+                else:
+                    #getting user
+                    db.execute(f"SELECT id FROM users WHERE user_id = '{message.from_user.id}'")
+                    user_id = db.fetchone()[0]
+
+                    #splig code from data
+                    code = data.split("_")[-1]
+
+                    #getting product
+                    db.execute(f"SELECT code FROM product WHERE code = {code}")
+                    product_code = db.fetchone()[0]
+
+                    add_to_cart_dict["user"] = user_id
+                    add_to_cart_dict["product"] = product_code
+
+                    client.answer_callback_query(callback_id, "لطفا تعداد درخواستی از این محصول رو به صورت عدد بفرس", show_alert = True)
+
+                    global get_product_count_cart
+                    get_product_count_cart = True
+            else:
+                key = [[KeyboardButton("ارسال شماره تلفن 📲", request_contact = True)]]
+                app.send_message(
+                        chat_id,
+                        text = "<strong>حساب شما تایید نشده است.⛔️</strong>\nبرای تایید حساب شماره خود را ارسال کنید \n\nروی دکمه زیر کلیک کنید تا به صورت خودکار شماره ارسال بشود👇",
+                        reply_markup = ReplyKeyboardMarkup(key,resize_keyboard = True, one_time_keyboard  = True, selective = True,),
+                        parse_mode = "html"
+                    )
         else:
-            #getting user
-            db.execute(f"SELECT id FROM users WHERE user_id = '{message.from_user.id}'")
-            user_id = db.fetchone()[0]
-
-            #splig code from data
-            code = data.split("_")[-1]
-
-            #getting product
-            db.execute(f"SELECT code FROM product WHERE code = {code}")
-            product_code = db.fetchone()[0]
-
-            add_to_cart_dict["user"] = user_id
-            add_to_cart_dict["product"] = product_code
-
-            client.answer_callback_query(callback_id, "لطفا تعداد درخواستی از این محصول رو به صورت عدد بفرس", show_alert = True)
-
-            global get_product_count_cart
-            get_product_count_cart = True
-
+            key = [[KeyboardButton("ارسال شماره تلفن 📲", request_contact = True)]]
+            app.send_message(
+                    chat_id,
+                    text = "<strong>حساب شما تایید نشده است.⛔️</strong>\nبرای تایید حساب شماره خود را ارسال کنید \n\nروی دکمه زیر کلیک کنید تا به صورت خودکار شماره ارسال بشود👇",
+                    reply_markup = ReplyKeyboardMarkup(key,resize_keyboard = True, one_time_keyboard  = True, selective = True,),
+                    parse_mode = "html"
+                )
 
     #show cart
     if data == "customer_see_cart":
@@ -823,12 +864,12 @@ def CallBack(client, message):
         product["reserv"] = fetched_data[8]
 
 
-        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
         if len(fetched_data) == 7:
             product["description"] = fetched_data[6]
-            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
 
         app.send_photo(chat_id, photo = product["photo"], caption = text)
@@ -1230,12 +1271,7 @@ def CallBack(client, message):
             cart_hour = db.fetchone()[2]
             reply_markup = InlineKeyboardMarkup([
                                 [
-                                    InlineKeyboardButton(f"فعال {'✅' if status == 'True' else ''}", callback_data = "active_cart_settings"),
-                                    InlineKeyboardButton(f"غیرفعال {'✅' if status == 'False' else ''}", callback_data = "deactive_cart_settings")
-                                ],
-
-                                [
-                                    InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
+                                    InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "blank")
                                 ],
                                 [
                                     InlineKeyboardButton("➕", callback_data = "increase_cart_hour"),
@@ -1267,58 +1303,7 @@ def CallBack(client, message):
                                     reply_markup = reply_markup
             )
 
-    #activate cart
-    if data == "active_cart_settings":
-        db.execute("SELECT * FROM settings WHERE name = 'cart_active'")
-        if db.fetchone()[2] != "True":
-            db.execute("UPDATE settings SET value = 'True' WHERE name = 'cart_active'")
-            mydb.commit()
-            db.execute("SELECT * FROM adminmessageid")
-            message_id = db.fetchone()[1]
-            db.execute("SELECT * FROM settings WHERE name = 'cart_hour'")
-            cart_hour = db.fetchone()[2]
-            app.edit_message_text(
-                                        chat_id,
-                                        message_id = message_id,
-                                        text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
-                                        reply_markup = InlineKeyboardMarkup([
-                                            [
-                                                InlineKeyboardButton("فعال ✅", callback_data = "active_cart_settings"),
-                                                InlineKeyboardButton("غیرفعال", callback_data = "deactive_cart_settings")
-                                            ],
-                                            [
-                                                InlineKeyboardButton("👇 تنظیم ساعت حذف خودکار از سبد خرید 👇 ", callback_data = "l")
-                                            ],
-                                            [
-                                                InlineKeyboardButton("➕", callback_data = "increase_cart_hour"),
-                                                InlineKeyboardButton(f"{cart_hour}", callback_data = "blank"),
-                                                InlineKeyboardButton("➖", callback_data = "decrease_cart_hour")
-                                            ],
-                                            [
-                                                InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
-                                            ]
-                                        ])
-                )
 
-
-    #deactive cart
-    if data == "deactive_cart_settings":
-        db.execute("UPDATE settings SET value = 'False' WHERE name = 'cart_active'")
-        mydb.commit()
-        app.edit_message_text(
-                                    chat_id,
-                                    message_id = message_id,
-                                    text = "🔘 مدیریت سبد خرید\n\nتو این بخش میتونی تنظیمات سبد خرید رو انجام بدی👇",
-                                    reply_markup = InlineKeyboardMarkup([
-                                        [
-                                            InlineKeyboardButton("فعال", callback_data = "active_cart_settings"),
-                                            InlineKeyboardButton("غیرفعال ✅", callback_data = "deactive_cart_settings")
-                                        ],
-                                        [
-                                            InlineKeyboardButton("برگشت »", callback_data = "back_to_store_management")
-                                        ]
-                                    ])
-            )
 
     #increase cart hour
     if data == "increase_cart_hour":
@@ -1422,6 +1407,14 @@ def CallBack(client, message):
         )
 
 
+    #delete product from cart when use want to add in cart
+    if data.startswith("delete_product_cart_from_cart_"):
+        code = data.split("_")[-1]
+        db.execute(f"DELETE FROM cart WHERE product = {code} AND user = {message.from_user.id}")
+        mydb.commit()
+
+        app.delete_messages(chat_id, message.message.message_id)
+        app.send_message(chat_id, f"محصول با کد {code} از سبد خرید شما حذف شد❌")
     #handle discounts
     if data == "discounts":
         keys = []
@@ -1565,7 +1558,7 @@ def CallBack(client, message):
         client.answer_callback_query(callback_id, "")
         get_product_count_or_not = True
         app.send_message(chat_id,
-        "📩تعداد <strong>موجودی</strong> محصولت رو بفرست",
+        "📩 مقدار<strong>موجودی</strong> محصولت رو بفرست",
         parse_mode = "html"
     )
 
@@ -1645,11 +1638,14 @@ def CallBack(client, message):
         try:
             db.execute("SELECT value FROM settings WHERE name = 'bot_channel'")
             channel = db.fetchone()[0]
+            channel = (channel.replace("@", " ")).strip()
+
         except TypeError:
             pass
 
         db.execute(f"SELECT * FROM product WHERE code = {last_product[0]}")
         fetched_data = db.fetchone()
+        product["code"] = fetched_data[0]
         product["photo"] = fetched_data[1]
         product["name"] = fetched_data[2]
         product["count"] = fetched_data[3]
@@ -1657,24 +1653,29 @@ def CallBack(client, message):
         product["price"] = fetched_data[5]
         product["reserv"] = fetched_data[8]
 
-        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+        text = f"⚜️{product['name']}\n\n<strong>کد محصول : </strong>‌{product['code']}\n<strong>مقدار موجودی : </strong>{product['count']} {product['unit']}\n<strong>قیمت : </strong>هر {product['unit']}، {product['price']} تومان"
 
 
         if len(fetched_data) == 7:
             product["description"] = fetched_data[6]
-            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
-        try:
-            db.execute("SELECT value FROM settings WHERE name = ' send_to_channel'")
-            send_to_channel_status = db.fetchone()[0]
+            text += f"\nتوضیحات : {product['description']}"
 
-            if send_to_channel_status == "on":
+        try:
+            db.execute("SELECT value FROM settings WHERE name = 'send_to_channel'")
+            send_to_channel_status = db.fetchone()
+            if send_to_channel_status == None:
+                db.execute("INSERT INTO settings (name, value) VALUES ('send_to_channel', 'off')")
+                mydb.commit()
+
+            bot_username = app.get_me().username
+            if send_to_channel_status[0] == "on":
                 app.send_photo(
                                 channel,
                                 photo = product["photo"],
                                 caption = text,
                                 reply_markup = InlineKeyboardMarkup([
                                     [
-                                        InlineKeyboardButton("مشاهده محصول 👁", url = f"http://t.me/vajd_shop_bot?start={last_product[0]}")
+                                        InlineKeyboardButton("مشاهده محصول 👁", url = f"http://t.me/{bot_username}?start={last_product[0]}")
                                     ]
                         ]))
 
@@ -1687,6 +1688,8 @@ def CallBack(client, message):
                 app.send_message(chat_id, f"ربات رو هنوز توی کانال {channel} ادمین نکردی⛔️")
             except TypeError:
                 pass
+        except TypeError:
+            pass
 
 
 
@@ -1772,12 +1775,12 @@ def CallBack(client, message):
             sent_product = app.edit_message_text(
                         chat_id,
                         reply_markup = sent_product.reply_markup,
-                        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
+                        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}",
                         message_id  = sent_product.message_id
                     )
 
         except KeyError:
-            caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+            caption = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
             sent_product = app.edit_message_text(
                         chat_id,
                         reply_markup = sent_product.reply_markup,
@@ -1795,6 +1798,21 @@ def CallBack(client, message):
         get_code_message = app.send_message(chat_id, "لطفا <strong>کد </strong> محصول مورد نظرتو برای ویرایش بفرست ✏️", parse_mode = "html")
 
 
+    #cancel deleting prodcut from shop
+    if data == "cancel_delete_product":
+        app.delete_messages(chat_id, message.message.message_id)
+        ProductMainMenu = app.send_message(
+            chat_id = chat_id,
+            text = "🔘 مدیریت محصولات \n\n 🛍 تو این بخش میتونی عملکرد های زیر رو روی محصولات فروشگاهت داشته باشی 👇",
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_new_product")],
+                [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product")],
+                [InlineKeyboardButton("✏️ویرایش محصول", callback_data = "with_menu_edit_product")],
+                [InlineKeyboardButton("برگشت به منو اصلی 🔙", callback_data = "back_to_main_menu")]
+            ])
+        )
+        db.execute(f"UPDATE adminmessageid SET message_id = {ProductMainMenu.message_id}")
+        mydb.commit()
     #delete product
     if data == "delete_product":
         global GetDeleteCode
@@ -1865,6 +1883,28 @@ def CallBack(client, message):
         #send saved file to admin
         app.send_document(chat_id, 'کل تخفیف ها.xls', caption = "🔖همه تخفیف ها افزوده شده در فروشگاه شما از ابتدای راه اندازی\n📂به صورت فایل اکسل")
 
+@app.on_message(filters.audio)
+def SendMessageToAll(message, client):
+    #giving message to send all users
+    global message_to_all
+    if message_to_all == True:
+        db.execute(f"SELECT name FROM settings WHERE name = '{message.chat.id}'")
+        admin_id = db.fetchone()[0]
+        db.execute("SELECT user_id FROM users")
+        counter = 0
+        counter2 = 0
+        for i in db.fetchall():
+            if i[0] != admin_id:
+                try:
+                    app.copy_message(int(i[0]), message.chat.id, message.message_id)
+                    counter += 1
+                except BadRequest:
+                    counter2 += 1
+
+        app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
+        message_to_all = False
+
+
 @app.on_message(filters.forwarded)
 def Forwarded(client, message):
     global forward_to_all
@@ -1912,7 +1952,7 @@ def GetTexts(client, message):
     global get_auth_code
     global get_product_count_cart
     global get_code_add_to_cart
-    global message_to_all
+
 
 
     #giving news password
@@ -1971,16 +2011,16 @@ def GetTexts(client, message):
                     product["price"] = delete_product[5]
                     product["reserv"] = delete_product[8]
 
-                    text = f"🔗{product['name']}\n\nتعداد درخواستی شما : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+                    text = f"🔗{product['name']}\n\nتعداد درخواستی شما : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
                     if len(delete_product) == 7:
                         product["description"] = fetched_data[6]
-                        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
                     delete_product_keys = [
                         [InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = f"delete_product_button_cart_{delete_product[0]}")],
-                        [InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")]
+                        [InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product_from_cart")]
                     ]
 
                     #select active discount
@@ -1989,7 +2029,7 @@ def GetTexts(client, message):
                     if discount != None:
                         delete_product_keys.append([InlineKeyboardButton("🎉 علت تخفیف 🎉", callback_data = "discount_cause")])
                         finally_price = int(product['price']) - (int(product['price']) // 100) * int(discount[0])
-                        text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong> هزار تومان"
+                        text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong>  تومان تومان"
 
                     aa = app.send_photo(
                                     message.chat.id,
@@ -2028,7 +2068,7 @@ def GetTexts(client, message):
 
             CountMessage = app.send_message(
                             message.chat.id,
-                            "<strong>تعداد موجودی محصولت رو گرفتم✅</strong>\n\nبزن رو دکمه زیر تا بریم مرحله بعدی...",
+                            "<strong>مقدار موجودی محصولت رو گرفتم✅</strong>\n\nبزن رو دکمه زیر تا بریم مرحله بعدی...",
                             reply_markup = InlineKeyboardMarkup([
                                 [
                                     InlineKeyboardButton("مرحله بعد »", callback_data = "next-step-unit"),
@@ -2082,10 +2122,7 @@ def GetTexts(client, message):
                 parse_mode = "html"
         )
         app.delete_messages(message.chat.id, PriceMessage.message_id)
-        app.delete_messages(
-                        message.chat.id,
-                        AdminMainMessage.message_id,
-                        )
+
 
         SendAddedProduct(client, message, message.chat.id)
 
@@ -2106,12 +2143,12 @@ def GetTexts(client, message):
             product["reserv"] = fetched_data[8]
 
 
-            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
             if len(fetched_data) == 7:
                 product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
 
             sent_product = app.send_photo(message.chat.id, photo = product["photo"], caption = text,
@@ -2151,22 +2188,20 @@ def GetTexts(client, message):
             product["price"] = fetched_data[5]
             product["reserv"] = fetched_data[8]
 
-            text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
             if len(fetched_data) == 7:
                 product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
             sent_product = app.send_photo(
                                             message.chat.id,
                                             photo = product["photo"],
                                             caption = text,
                                             reply_markup = InlineKeyboardMarkup([
-                                                [
-                                                    InlineKeyboardButton("❌ حذف محصول ❌", callback_data = "delete_product_button"),
-                                                    InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")
-                                                ]
+                                                [InlineKeyboardButton("❌ حذف محصول ❌", callback_data = "delete_product_button")],
+                                                [InlineKeyboardButton("🔱 لغو کردن", callback_data = "cancel_delete_product")]
                                             ])
                                         )
 
@@ -2264,12 +2299,22 @@ def GetTexts(client, message):
         db_code = db.fetchone()[0]
         if get_code.isdigit() and get_code == db_code:
             app.send_message(message.chat.id,"کد صحیح است✅\n\nحساب شما تایید شد💐")
+
             get_auth_code = False
             db.execute(f"DELETE FROM cart_code WHERE chat_id = '{message.chat.id}'")
             db.execute(f"UPDATE cart_info SET status = 'active' WHERE chat_id = '{message.chat.id}'")
             mydb.commit()
-
-
+            start_main_mneu = app.send_message(
+                            message.chat.id,
+                            text = welcome_text,
+                            reply_markup = InlineKeyboardMarkup([
+                                [InlineKeyboardButton("سبد خرید 🛒", callback_data = "customer_see_cart")],
+                                [InlineKeyboardButton("ارتباط با پشتیبانی فروشگاه 👤", f"{f'https://t.me/{id}' if id != 'blank' else 'blank'}")],
+                                [InlineKeyboardButton("💻 ارتباط به برنامه نویس ربات 💻", url = "https://t.me/hasan_zltn9")],
+                            ])
+            )
+            db.execute(f"UPDATE chat_id SET message_id = '{start_main_mneu.message_id}'")
+            mydb.commit()
             app.delete_messages(message.chat.id, message_id)
             db.execute("SELECT value FROM settings WHERE name = 'welcome_text'")
             welcome_text = db.fetchone()[0]
@@ -2303,6 +2348,7 @@ def GetTexts(client, message):
                 try:
                     db.execute(f"INSERT INTO cart (product, user, count) VALUES ('{add_to_cart_dict['product']}', '{add_to_cart_dict['user']}', {add_to_cart_dict['count']})")
                     mydb.commit()
+                    print("hewwllllll")
 
 
                     #get product
@@ -2330,12 +2376,27 @@ def GetTexts(client, message):
                     db.execute(f"SELECT message_id FROM chat_id WHERE chat_id = '{message.chat.id}'")
                     message_id = db.fetchone()[0]
                     app.delete_messages(message.chat.id, message_id)
+                    cart_menu2 = app.send_message(
+                                chat_id = message.chat.id,
+                                text = "🔘 بخش سبد خرید\n\nتو این بخش میتونی عملکرد های زیر رو روی سبد خریدت داشته باشی👇",
+                                reply_markup = InlineKeyboardMarkup([
+                                    [InlineKeyboardButton("📝 لیست محصولات موجود در سبد خرید 🛒", callback_data = "cart_list")],
+                                    [InlineKeyboardButton("➕ افزودن محصول", callback_data = "add_to_cart_btn")],
+                                    [InlineKeyboardButton("✖️ حذف محصول", callback_data = "delete_product_cart")],
+                                    [InlineKeyboardButton("برگشت »", callback_data = "back_to_start_menu")]
+
+                                ])
+                        )
+                    db.execute(f"UPDATE chat_id SET message_id = '{cart_menu2.message_id}' WHERE chat_id = '{message.chat.id}'")
+                    mydb.commit()
+
                 except Exception as m:
-                    pass
+                    print(m)
+
             else:
                 app.send_message(
                             message.chat.id,
-                            f"تعداد درخواست شما بیشتر از موجودی این محصول است❌\nلطفا دوباره تعداد درخواست خودتون رو اسال کنید...\n\n<strong>تعداد موجودی : {product_count[0]}</strong>",
+                            f"تعداد درخواست شما بیشتر از موجودی این محصول است❌\nلطفا دوباره تعداد درخواست خودتون رو اسال کنید...\n\n<strong>مقدار موجودی : {product_count[0]}</strong>",
                             parse_mode = "html"
                             )
 
@@ -2363,11 +2424,11 @@ def GetTexts(client, message):
                     product["price"] = fetched_data[5]
                     product["reserv"] = fetched_data[8]
 
-                    text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان"
+                    text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
                     if len(fetched_data) == 7:
                         product["description"] = fetched_data[6]
-                        text = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong> \nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}"
+                        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong> \nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
                     db.execute("SELECT percent, cause FROM discounts WHERE status = 'active'")
                     discount = db.fetchone()
@@ -2381,7 +2442,7 @@ def GetTexts(client, message):
                     if discount != None:
                         product_see_keys.append([InlineKeyboardButton("🎉 علت تخفیف 🎉", callback_data = "discount_cause")])
                         finally_price = int(product['price']) - (int(product['price']) // 100) * int(discount[0])
-                        text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong> هزار تومان"
+                        text += f"\n\n🔖<strong>{discount[0]} درصد تخفیف</strong>\n💰 قیمت نهایی : <strong>{finally_price}</strong>  تومان تومان"
 
                     cc = app.send_photo(
                                     message.chat.id,
@@ -2404,7 +2465,7 @@ def GetTexts(client, message):
                         reply_markup = InlineKeyboardMarkup([
                             [
                                 InlineKeyboardButton("مشاهده سبد خرید 🛒", callback_data = "customer_see_cart"),
-                                InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = "delete_product_cart")
+                                InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = f"delete_product_cart_from_cart_{message.text}")
                             ]
                         ])
                     )
@@ -2415,50 +2476,22 @@ def GetTexts(client, message):
         else:
             app.send_message(message.chat.id, "لطفا عدد بفرستید...")
 
-    #giving message to send all users
-    elif message_to_all == True:
-        db.execute(f"SELECT name FROM settings WHERE name = '{message.chat.id}'")
-        admin_id = db.fetchone()[0]
-        db.execute("SELECT user_id FROM users")
-        counter = 0
-        counter2 = 0
-        for i in db.fetchall():
-            if i[0] != admin_id:
-                try:
-                    app.send_message(int(i[0]), f"{message.text}")
-                    counter += 1
-                except BadRequest:
-                    counter2 += 1
-
-        app.send_message(int(admin_id), f"پیام فوق به کاربران ارسال شد ✅\n\n<strong>📌موفق : </strong>{counter} کاربر\n<strong>📌ناموفق : </strong>{counter2} کاربر")
-        message_to_all = False
-
     else:
-        print(message.text)
-
-    try:
-        global edit_product_info
-        global edit_type
-
-        if edit_product_info[edit_type] == True:
-            global variable_edit_after_submiting
-
-            if variable_edit_after_submiting == True:
-                db.execute(f"UPDATE product SET {edit_type} = '{message.text}' WHERE code = {code}")
-                mydb.commit()
-                edit_product_info[edit_type] = False
-
-            else:
-                product[edit_type] = message.text
-                edit_product_info[edit_type] = False
-
-            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
-
-    except Exception as ex:
         db.execute(f"SELECT value FROM settings WHERE name = '{message.chat.id}'")
-        status = db.fetchone()[0]
-        if status == "start":
-            text = message.text
+        status = db.fetchone()
+        text = message.text
+        productlist = []
+
+        if status != None:
+            if status[0] == 'start':
+                print("in if")
+                if text.isdigit():
+                    db.execute(f"SELECT code,name FROM product WHERE code = {text}")
+                    productlist = db.fetchall()
+                else:
+                    db.execute(f"SELECT code,name FROM product WHERE name LIKE '%{text}%'")
+                    productlist = db.fetchall()
+        else:
             if text.isdigit():
                 db.execute(f"SELECT code,name FROM product WHERE code = {text}")
                 productlist = db.fetchall()
@@ -2466,6 +2499,7 @@ def GetTexts(client, message):
                 db.execute(f"SELECT code,name FROM product WHERE name LIKE '%{text}%'")
                 productlist = db.fetchall()
 
+        if len(productlist) > 0:
             andis = 0
             keys = []
             buttonlist = []
@@ -2482,6 +2516,29 @@ def GetTexts(client, message):
                 reply_markup = InlineKeyboardMarkup(keys)
             )
 
+
+    try:
+        global edit_product_info
+        global edit_type
+        global variable_edit_after_submiting
+
+        if edit_product_info[edit_type] == True:
+            print("edit_product_info[edit_type]", edit_product_info[edit_type])
+
+            if variable_edit_after_submiting == True:
+                db.execute(f"UPDATE product SET {edit_type} = '{message.text}' WHERE code = {code}")
+                mydb.commit()
+                edit_product_info[edit_type] = False
+
+            else:
+                print("before submiting")
+                product[edit_type] = message.text
+                edit_product_info[edit_type] = False
+
+            app.send_message(message.chat.id, "مقدار جدید ثبت شد〽️✅")
+
+    except Exception as ex:
+        print(ex)
 @app.on_message(filters.photo)
 def GetProductImage(client, message):
     global get_product_image_or_not
@@ -2503,7 +2560,7 @@ def SendAddedProduct(client, message, chat_id):
     try:
         sent_product = app.send_photo(
                     chat_id, photo = product["photo"],
-                    caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان\nتوضیحات : {product['description']}",
+                    caption = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}",
                     reply_markup = InlineKeyboardMarkup(
                         [
                             [
@@ -2517,7 +2574,7 @@ def SendAddedProduct(client, message, chat_id):
     except KeyError:
         sent_product = app.send_photo(
                         chat_id,
-                        photo = product["photo"], caption = f"🔗{product['name']}\n\nتعداد موجودی : {product['count']} {product['unit']}</strong>\nقیمت : هر {product['unit']}, {product['price']}  هزار تومان",
+                        photo = product["photo"], caption = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان",
                         reply_markup = InlineKeyboardMarkup(
                             [
                                 [
