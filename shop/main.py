@@ -47,11 +47,14 @@ database.add_job(DbConnect, "interval", seconds = 600)
 database.start()
 DbConnect()
 
+
+token = open("token.txt", "r")
+token = token.read()
 app = Client(
     "shop",
     api_id = 571145,
     api_hash = "7222730d378cb9618018bdf9825d6a3b",
-    bot_token = "1938736217:AAHCB0QawPNq_NAi_pmDXeGrEsNm_qrb8pw"
+    bot_token = f"{token}"
 )
 
 
@@ -232,13 +235,15 @@ def main(client, message):
             product["count"] = fetched_data[3]
             product["unit"] = fetched_data[4]
             product["price"] = fetched_data[5]
+            product["description"] = fetched_data[6]
             product["reserv"] = fetched_data[8]
-            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
-            if len(fetched_data) == 7:
-                product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
+            text = f"⚜️{product['name']}\n\n<strong>مقدار موجودی :</strong>{product['count']} {product['unit']}\n<strong>قیمت : هر </strong>{product['unit']}، {product['price']}<strong>تومان</strong>"
+
+
+            if "description" in product:
+                text += f"\n\n<strong>📑 توضیحات : </strong>{product['description']}"
 
 
             #get user
@@ -757,6 +762,7 @@ def CallBack(client, message):
                         reply_markup = ReplyKeyboardMarkup(key,resize_keyboard = True, one_time_keyboard  = True, selective = True,),
                         parse_mode = "html"
                     )
+                client.answer_callback_query(callback_date, "")
         else:
             key = [[KeyboardButton("ارسال شماره تلفن 📲", request_contact = True)]]
             app.send_message(
@@ -864,12 +870,12 @@ def CallBack(client, message):
         product["reserv"] = fetched_data[8]
 
 
-        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
+        text = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
         if len(fetched_data) == 7:
             product["description"] = fetched_data[6]
-            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
+            text = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
 
         app.send_photo(chat_id, photo = product["photo"], caption = text)
@@ -899,7 +905,7 @@ def CallBack(client, message):
         link = db.fetchone()
 
         if link != None:
-            text += f"\n\n\n🔗کانال تنظیم شده : {link[0]}"
+            text += f"\n\n\n⚜️کانال تنظیم شده : @{link[0]}"
 
 
         app.edit_message_text(
@@ -1244,7 +1250,7 @@ def CallBack(client, message):
             wb.save("سبد خرید.xls")
             app.send_document(chat_id, "سبد خرید.xls", caption = "لیست سبد خرید\n📂به صورت فایل اکسل")
         else:
-            client.answer_callback_query(callback_id, "سبد خرید خالی است🌀")
+            client.answer_callback_query(callback_id, "سبد خرید خالی است🌀", show_alert = True)
 
     #cart
     if data == "cart":
@@ -1638,7 +1644,6 @@ def CallBack(client, message):
         try:
             db.execute("SELECT value FROM settings WHERE name = 'bot_channel'")
             channel = db.fetchone()[0]
-            channel = (channel.replace("@", " ")).strip()
 
         except TypeError:
             pass
@@ -1651,14 +1656,14 @@ def CallBack(client, message):
         product["count"] = fetched_data[3]
         product["unit"] = fetched_data[4]
         product["price"] = fetched_data[5]
+        product["description"] = fetched_data[6]
         product["reserv"] = fetched_data[8]
 
         text = f"⚜️{product['name']}\n\n<strong>کد محصول : </strong>‌{product['code']}\n<strong>مقدار موجودی : </strong>{product['count']} {product['unit']}\n<strong>قیمت : </strong>هر {product['unit']}، {product['price']} تومان"
 
 
-        if len(fetched_data) == 7:
-            product["description"] = fetched_data[6]
-            text += f"\nتوضیحات : {product['description']}"
+        if "description" in product:
+            text += f"\n\n<strong>📑 توضیحات : </strong>{product['description']}"
 
         try:
             db.execute("SELECT value FROM settings WHERE name = 'send_to_channel'")
@@ -1775,12 +1780,12 @@ def CallBack(client, message):
             sent_product = app.edit_message_text(
                         chat_id,
                         reply_markup = sent_product.reply_markup,
-                        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}",
+                        text = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}",
                         message_id  = sent_product.message_id
                     )
 
         except KeyError:
-            caption = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
+            caption = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
             sent_product = app.edit_message_text(
                         chat_id,
                         reply_markup = sent_product.reply_markup,
@@ -1796,7 +1801,7 @@ def CallBack(client, message):
         GetEditCode = True
         variable_edit_after_submiting = True
         get_code_message = app.send_message(chat_id, "لطفا <strong>کد </strong> محصول مورد نظرتو برای ویرایش بفرست ✏️", parse_mode = "html")
-
+        client.answer_callback_query(callback_data, "")
 
     #cancel deleting prodcut from shop
     if data == "cancel_delete_product":
@@ -2011,12 +2016,12 @@ def GetTexts(client, message):
                     product["price"] = delete_product[5]
                     product["reserv"] = delete_product[8]
 
-                    text = f"🔗{product['name']}\n\nتعداد درخواستی شما : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
+                    text = f"⚜️{product['name']}\n\nتعداد درخواستی شما : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
 
                     if len(delete_product) == 7:
                         product["description"] = fetched_data[6]
-                        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
+                        text = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
 
                     delete_product_keys = [
                         [InlineKeyboardButton("حذف از سبد خرید ❌", callback_data = f"delete_product_button_cart_{delete_product[0]}")],
@@ -2140,15 +2145,15 @@ def GetTexts(client, message):
             product["count"] = fetched_data[3]
             product["unit"] = fetched_data[4]
             product["price"] = fetched_data[5]
+            product["description"] = fetched_data[6]
             product["reserv"] = fetched_data[8]
 
 
-            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
+            text = f"⚜️{product['name']}\n\n<strong>مقدار موجودی :</strong>{product['count']} {product['unit']}\n<strong>قیمت : هر </strong>{product['unit']}، {product['price']}<strong>تومان</strong>"
 
 
-            if len(fetched_data) == 7:
-                product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
+            if "description" in product:
+                text += f"\n\n<strong>📑 توضیحات : </strong>{product['description']}"
 
 
             sent_product = app.send_photo(message.chat.id, photo = product["photo"], caption = text,
@@ -2186,14 +2191,15 @@ def GetTexts(client, message):
             product["count"] = fetched_data[3]
             product["unit"] = fetched_data[4]
             product["price"] = fetched_data[5]
+            product["description"] = fetched_data[6]
             product["reserv"] = fetched_data[8]
 
-            text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان"
+
+            text = f"⚜️{product['name']}\n\n<strong>مقدار موجودی :</strong>{product['count']} {product['unit']}\n<strong>قیمت : هر </strong>{product['unit']}، {product['price']}<strong>تومان</strong>"
 
 
-            if len(fetched_data) == 7:
-                product["description"] = fetched_data[6]
-                text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
+            if "description" in product:
+                text += f"\n\n<strong>📑 توضیحات : </strong>{product['description']}"
 
             sent_product = app.send_photo(
                                             message.chat.id,
@@ -2264,13 +2270,14 @@ def GetTexts(client, message):
     # giving id for set channel
     elif add_group_or_channel_to_bot == True:
         db.execute("SELECT value FROM settings WHERE name = 'bot_channel'")
+        text = (message.text).replace("@", " ").strip()
         if db.fetchone() == None:
-            db.execute(f"INSERT INTO settings (name, value) VALUES ('bot_channel', '{message.text}')")
+            db.execute(f"INSERT INTO settings (name, value) VALUES ('bot_channel', '{text}')")
         else:
-            db.execute(f"UPDATE settings SET value = '{message.text}' WHERE name = 'bot_channel'")
+            db.execute(f"UPDATE settings SET value = '{text}' WHERE name = 'bot_channel'")
         mydb.commit()
 
-        app.send_message(message.chat.id, f"لینک کانال : {message.text}\n\n⛔️توجه⛔️\nربات رو حتما باید توی کانال مورد نظر ادمین کنی تا به درستی کار بکنه. یادت نره\n\n⚠️همین الان ادمینش کن")
+        app.send_message(message.chat.id, f"لینک کانال : @{text}\n\n⛔️توجه⛔️\nربات رو حتما باید توی کانال مورد نظر ادمین کنی تا به درستی کار بکنه. یادت نره\n\n⚠️همین الان ادمینش کن")
         add_group_or_channel_to_bot = False
 
     elif set_welcome_text == True:
@@ -2422,13 +2429,15 @@ def GetTexts(client, message):
                     product["count"] = fetched_data[3]
                     product["unit"] = fetched_data[4]
                     product["price"] = fetched_data[5]
+                    product["description"] = fetched_data[6]
                     product["reserv"] = fetched_data[8]
 
-                    text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان"
 
-                    if len(fetched_data) == 7:
-                        product["description"] = fetched_data[6]
-                        text = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']} <strong>({product['reserv']} {product['unit']} در سبد خرید سایر مشتریان)</strong> \nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}"
+                    text = f"⚜️{product['name']}\n\n<strong>مقدار موجودی :</strong>{product['count']} {product['unit']}\n<strong>قیمت : هر </strong>{product['unit']}، {product['price']}<strong>تومان</strong>"
+
+
+                    if "description" in product:
+                        text += f"\n\n<strong>📑 توضیحات : </strong>{product['description']}"
 
                     db.execute("SELECT percent, cause FROM discounts WHERE status = 'active'")
                     discount = db.fetchone()
@@ -2560,7 +2569,7 @@ def SendAddedProduct(client, message, chat_id):
     try:
         sent_product = app.send_photo(
                     chat_id, photo = product["photo"],
-                    caption = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}",
+                    caption = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}\nقیمت : هر {product['unit']}، {product['price']} تومان\nتوضیحات : {product['description']}",
                     reply_markup = InlineKeyboardMarkup(
                         [
                             [
@@ -2574,7 +2583,7 @@ def SendAddedProduct(client, message, chat_id):
     except KeyError:
         sent_product = app.send_photo(
                         chat_id,
-                        photo = product["photo"], caption = f"🔗{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان",
+                        photo = product["photo"], caption = f"⚜️{product['name']}\n\nمقدار موجودی : {product['count']} {product['unit']}</strong>\nقیمت : هر {product['unit']}، {product['price']} تومان",
                         reply_markup = InlineKeyboardMarkup(
                             [
                                 [
